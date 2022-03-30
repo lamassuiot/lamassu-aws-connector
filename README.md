@@ -23,6 +23,4 @@ This repo gathers all the code and information that has been used to develop the
 * ***Lamassu CDK***: [AWS CDK Documentation](docs/cdk/cdk.md)
 
 Additional documentation
-
 * ***Cloud events***: [Cloud Events Documentation](docs/cloud_events/cloud_events.md)
-* ***Just in time provisioning***: [JITP Documentation](docs/jitp/jitp.md)
