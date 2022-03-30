@@ -1,0 +1,35 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.handler = void 0;
+const aws_sdk_1 = require("aws-sdk");
+const cloudevents_1 = require("cloudevents");
+const iot = new aws_sdk_1.Iot();
+const sqs = new aws_sdk_1.SQS();
+exports.handler = async (event) => {
+    console.log(event);
+    const requestedCloudEvent = new cloudevents_1.CloudEvent(event);
+    const registrationCodeResponse = await iot.getRegistrationCode({}).promise();
+    const registrationCodeChallenge = registrationCodeResponse.registrationCode;
+    console.log("Registration code:", registrationCodeChallenge);
+    const cloudEvent = new cloudevents_1.CloudEvent({
+        type: "io.lamassu.iotcore.ca.registration.reg-code",
+        id: requestedCloudEvent.id,
+        source: "aws/lambda",
+        time: new Date().toString(),
+        specversion: "1.0",
+        data: {
+            ca_name: requestedCloudEvent.data.ca_name,
+            ca_cert: requestedCloudEvent.data.ca_cert,
+            serial_number: requestedCloudEvent.data.serial_number,
+            registration_code: registrationCodeChallenge
+        }
+    });
+    try {
+        const sqsResponse = await sqs.sendMessage({ QueueUrl: process.env.SQS_RESPONSE_QUEUE_URL, MessageBody: cloudEvent.toString() }).promise();
+        console.log(sqsResponse);
+    }
+    catch (err) {
+        console.log("error while sending SQS messgae", err);
+    }
+};
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiaW5kZXguanMiLCJzb3VyY2VSb290IjoiIiwic291cmNlcyI6WyJpbmRleC50cyJdLCJuYW1lcyI6W10sIm1hcHBpbmdzIjoiOzs7QUFBQSxxQ0FBa0M7QUFDbEMsNkNBQXdDO0FBRXhDLE1BQU0sR0FBRyxHQUFHLElBQUksYUFBRyxFQUFFLENBQUE7QUFDckIsTUFBTSxHQUFHLEdBQUcsSUFBSSxhQUFHLEVBQUUsQ0FBQTtBQUVSLFFBQUEsT0FBTyxHQUFHLEtBQUssRUFBRSxLQUFVLEVBQUUsRUFBRTtJQUMxQyxPQUFPLENBQUMsR0FBRyxDQUFDLEtBQUssQ0FBQyxDQUFBO0lBRWxCLE1BQU0sbUJBQW1CLEdBQUcsSUFBSSx3QkFBVSxDQUFNLEtBQUssQ0FBQyxDQUFBO0lBRXRELE1BQU0sd0JBQXdCLEdBQUcsTUFBTSxHQUFHLENBQUMsbUJBQW1CLENBQUMsRUFBRSxDQUFDLENBQUMsT0FBTyxFQUFFLENBQUE7SUFDNUUsTUFBTSx5QkFBeUIsR0FBRyx3QkFBd0IsQ0FBQyxnQkFBZ0IsQ0FBQTtJQUMzRSxPQUFPLENBQUMsR0FBRyxDQUFDLG9CQUFvQixFQUFFLHlCQUF5QixDQUFDLENBQUE7SUFFNUQsTUFBTSxVQUFVLEdBQUcsSUFBSSx3QkFBVSxDQUFDO1FBQ2hDLElBQUksRUFBRSw2Q0FBNkM7UUFDbkQsRUFBRSxFQUFFLG1CQUFtQixDQUFDLEVBQUU7UUFDMUIsTUFBTSxFQUFFLFlBQVk7UUFDcEIsSUFBSSxFQUFFLElBQUksSUFBSSxFQUFFLENBQUMsUUFBUSxFQUFFO1FBQzNCLFdBQVcsRUFBRSxLQUFLO1FBQ2xCLElBQUksRUFBRTtZQUNKLE9BQU8sRUFBRSxtQkFBbUIsQ0FBQyxJQUFJLENBQUMsT0FBTztZQUN6QyxPQUFPLEVBQUUsbUJBQW1CLENBQUMsSUFBSSxDQUFDLE9BQU87WUFDekMsYUFBYSxFQUFFLG1CQUFtQixDQUFDLElBQUksQ0FBQyxhQUFhO1lBQ3JELGlCQUFpQixFQUFFLHlCQUF5QjtTQUM3QztLQUNGLENBQUMsQ0FBQTtJQUNGLElBQUk7UUFDRixNQUFNLFdBQVcsR0FBRyxNQUFNLEdBQUcsQ0FBQyxXQUFXLENBQUMsRUFBRSxRQUFRLEVBQUUsT0FBTyxDQUFDLEdBQUcsQ0FBQyxzQkFBdUIsRUFBRSxXQUFXLEVBQUUsVUFBVSxDQUFDLFFBQVEsRUFBRSxFQUFFLENBQUMsQ0FBQyxPQUFPLEVBQUUsQ0FBQTtRQUMxSSxPQUFPLENBQUMsR0FBRyxDQUFDLFdBQVcsQ0FBQyxDQUFBO0tBQ3pCO0lBQUMsT0FBTyxHQUFHLEVBQUU7UUFDWixPQUFPLENBQUMsR0FBRyxDQUFDLGlDQUFpQyxFQUFFLEdBQUcsQ0FBQyxDQUFBO0tBQ3BEO0FBQ0gsQ0FBQyxDQUFBIiwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgSW90LCBTUVMgfSBmcm9tIFwiYXdzLXNka1wiXG5pbXBvcnQgeyBDbG91ZEV2ZW50IH0gZnJvbSBcImNsb3VkZXZlbnRzXCJcblxuY29uc3QgaW90ID0gbmV3IElvdCgpXG5jb25zdCBzcXMgPSBuZXcgU1FTKClcblxuZXhwb3J0IGNvbnN0IGhhbmRsZXIgPSBhc3luYyAoZXZlbnQ6IGFueSkgPT4ge1xuICBjb25zb2xlLmxvZyhldmVudClcblxuICBjb25zdCByZXF1ZXN0ZWRDbG91ZEV2ZW50ID0gbmV3IENsb3VkRXZlbnQ8YW55PihldmVudClcblxuICBjb25zdCByZWdpc3RyYXRpb25Db2RlUmVzcG9uc2UgPSBhd2FpdCBpb3QuZ2V0UmVnaXN0cmF0aW9uQ29kZSh7fSkucHJvbWlzZSgpXG4gIGNvbnN0IHJlZ2lzdHJhdGlvbkNvZGVDaGFsbGVuZ2UgPSByZWdpc3RyYXRpb25Db2RlUmVzcG9uc2UucmVnaXN0cmF0aW9uQ29kZVxuICBjb25zb2xlLmxvZyhcIlJlZ2lzdHJhdGlvbiBjb2RlOlwiLCByZWdpc3RyYXRpb25Db2RlQ2hhbGxlbmdlKVxuXG4gIGNvbnN0IGNsb3VkRXZlbnQgPSBuZXcgQ2xvdWRFdmVudCh7XG4gICAgdHlwZTogXCJpby5sYW1hc3N1LmlvdGNvcmUuY2EucmVnaXN0cmF0aW9uLnJlZy1jb2RlXCIsXG4gICAgaWQ6IHJlcXVlc3RlZENsb3VkRXZlbnQuaWQsXG4gICAgc291cmNlOiBcImF3cy9sYW1iZGFcIixcbiAgICB0aW1lOiBuZXcgRGF0ZSgpLnRvU3RyaW5nKCksXG4gICAgc3BlY3ZlcnNpb246IFwiMS4wXCIsXG4gICAgZGF0YToge1xuICAgICAgY2FfbmFtZTogcmVxdWVzdGVkQ2xvdWRFdmVudC5kYXRhLmNhX25hbWUsXG4gICAgICBjYV9jZXJ0OiByZXF1ZXN0ZWRDbG91ZEV2ZW50LmRhdGEuY2FfY2VydCxcbiAgICAgIHNlcmlhbF9udW1iZXI6IHJlcXVlc3RlZENsb3VkRXZlbnQuZGF0YS5zZXJpYWxfbnVtYmVyLFxuICAgICAgcmVnaXN0cmF0aW9uX2NvZGU6IHJlZ2lzdHJhdGlvbkNvZGVDaGFsbGVuZ2VcbiAgICB9XG4gIH0pXG4gIHRyeSB7XG4gICAgY29uc3Qgc3FzUmVzcG9uc2UgPSBhd2FpdCBzcXMuc2VuZE1lc3NhZ2UoeyBRdWV1ZVVybDogcHJvY2Vzcy5lbnYuU1FTX1JFU1BPTlNFX1FVRVVFX1VSTCEsIE1lc3NhZ2VCb2R5OiBjbG91ZEV2ZW50LnRvU3RyaW5nKCkgfSkucHJvbWlzZSgpXG4gICAgY29uc29sZS5sb2coc3FzUmVzcG9uc2UpXG4gIH0gY2F0Y2ggKGVycikge1xuICAgIGNvbnNvbGUubG9nKFwiZXJyb3Igd2hpbGUgc2VuZGluZyBTUVMgbWVzc2dhZVwiLCBlcnIpXG4gIH1cbn1cbiJdfQ==

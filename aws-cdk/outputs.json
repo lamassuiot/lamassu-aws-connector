@@ -1,0 +1,9 @@
+{
+  "LamassuCdkStack": {
+    "CommandQueueARN": "arn:aws:sqs:eu-west-1:345876576284:lamassuCommand",
+    "ResponseQueueARN": "arn:aws:sqs:eu-west-1:345876576284:lamassuResponse",
+    "getRegistrationCodeEventSource": "cfc8f6b6-1d72-40b3-8892-06eff5c8f99e",
+    "createCaEventSource": "2db5cd4e-9787-4402-a27d-5ebfaf811023",
+    "bindCaAwsPolicyEventSource": "eb45a6e0-c254-4e24-9f4e-bb252e224c7d"
+  }
+}

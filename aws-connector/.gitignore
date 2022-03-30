@@ -1,0 +1,7 @@
+.vscode
+pv
+.env
+.pem
+.key
+.crt
+__debug_bin
