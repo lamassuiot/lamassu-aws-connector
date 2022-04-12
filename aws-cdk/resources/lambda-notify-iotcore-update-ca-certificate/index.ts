@@ -25,9 +25,9 @@ export const handler = async (event: any) => {
   console.log("deviceID: [" + deviceID + "] newStatus:[" + newStatus + "]")
 
   const cloudEvent = new CloudEvent({
-    type: "io.lamassu.iotcore.cert.updatestatus",
+    type: "io.lamassu.iotcore.cert.update-status",
     id: "",
-    source: "cloud-trail",
+    source: "aws/cloud-trail",
     time: new Date().toString(),
     specversion: "1.0",
     data: {

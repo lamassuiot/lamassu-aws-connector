@@ -52,8 +52,6 @@ export const handler = async (event: any) => {
     console.log("error while lisiting CA certificates", err)
   }
 
-  console.log(caListEventData)
-
   const cloudEvent = new CloudEvent({
     type: "io.lamassu.iotcore.config.response",
     id: requestedCloudEvent.id,
@@ -67,6 +65,7 @@ export const handler = async (event: any) => {
     }
   })
   try {
+    console.log("Cloud Event", cloudEvent)
     const sqsResponse = await sqs.sendMessage({ QueueUrl: process.env.SQS_RESPONSE_QUEUE_URL!, MessageBody: cloudEvent.toString() }).promise()
     console.log(sqsResponse)
   } catch (err) {

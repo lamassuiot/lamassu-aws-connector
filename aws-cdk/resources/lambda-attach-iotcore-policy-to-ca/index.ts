@@ -26,6 +26,7 @@ const returnIoTCoreCATemplate = (policyName: string) => {
           ThingName: {
             Ref: "AWS::IoT::Certificate::CommonName"
           },
+          ThingGroups: ["LAMASSU"],
           AttributePayload: {}
         }
       },

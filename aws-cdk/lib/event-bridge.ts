@@ -31,7 +31,7 @@ export class LamassuEventBridge extends cdk.Construct {
     })
 
     const monitorIotCoreCertUpdate = new lambdaNodeJS.NodejsFunction(this, "IotCoreUpdateCertificateStatus", {
-      entry: path.join(__dirname, "../resources/lambda-notify-iotcore-updatecertificate/index.ts"),
+      entry: path.join(__dirname, "../resources/lambda-notify-iotcore-update-certificate/index.ts"),
       runtime: lambda.Runtime.NODEJS_14_X,
       handler: "handler",
       bundling: {
@@ -53,15 +53,49 @@ export class LamassuEventBridge extends cdk.Construct {
       resources: ["*"]
     }))
 
-    const iotCertRevokeEvent = cloudtrail.Trail.onEvent(this, "IotCoreCertRevokeMonitor", {
+    const iotCertUpdateEvent = cloudtrail.Trail.onEvent(this, "IotCoreCertRevokeMonitor", {
       target: new targets.LambdaFunction(monitorIotCoreCertUpdate)
     })
 
-    iotCertRevokeEvent.addEventPattern({
+    iotCertUpdateEvent.addEventPattern({
       source: ["aws.iot"],
       detail: {
         eventSource: ["iot.amazonaws.com"],
         eventName: ["UpdateCertificate"]
+      }
+    })
+
+    const monitorIotCoreCACertUpdate = new lambdaNodeJS.NodejsFunction(this, "IotCoreUpdatCACertificateStatus", {
+      entry: path.join(__dirname, "../resources/lambda-notify-iotcore-update-ca-certificate/index.ts"),
+      runtime: lambda.Runtime.NODEJS_14_X,
+      handler: "handler",
+      bundling: {
+        nodeModules: [
+          "cloudevents"
+        ]
+      },
+      environment: {
+        SQS_RESPONSE_QUEUE_URL: config.outboundSQSQueue.queueUrl
+      }
+    })
+
+    monitorIotCoreCACertUpdate.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "iot:DescribeCACertificate",
+        "sqs:*"
+      ],
+      resources: ["*"]
+    }))
+
+    const iotCACertUpdateEvent = cloudtrail.Trail.onEvent(this, "IotCoreCACertRevokeMonitor", {
+      target: new targets.LambdaFunction(monitorIotCoreCACertUpdate)
+    })
+
+    iotCACertUpdateEvent.addEventPattern({
+      source: ["aws.iot"],
+      detail: {
+        eventSource: ["iot.amazonaws.com"],
+        eventName: ["UpdateCACertificate"]
       }
     })
   }

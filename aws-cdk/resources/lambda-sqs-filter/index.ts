@@ -11,10 +11,10 @@ export const handler = async (event: SQSEvent, context: Context) => {
       const cloudEvent = new CloudEvent(JSON.parse(record.body))
 
       switch (cloudEvent.type) {
-        case "io.lamassu.iotcore.ca.registration.init":
+        case "io.lamassu.iotcore.ca.registration.request-code":
           await execLambda(process.env.LAMBDA_CA_REGISTRATION_INIT!, cloudEvent)
           break
-        case "io.lamassu.iotcore.ca.registration.signed_challenge":
+        case "io.lamassu.iotcore.ca.registration.signed-code":
           await execLambda(process.env.LAMBDA_IMPORT_IOTCORE_CA!, cloudEvent)
           break
         case "io.lamassu.iotcore.ca.policy.attach":
@@ -22,6 +22,12 @@ export const handler = async (event: SQSEvent, context: Context) => {
           break
         case "io.lamassu.iotcore.config.request":
           await execLambda(process.env.LAMBDA_GET_IOTCORE_CONFIG!, cloudEvent)
+          break
+        case "io.lamassu.iotcore.thing.config.request":
+          await execLambda(process.env.LAMBDA_GET_IOTCORE_THING_CONFIG!, cloudEvent)
+          break
+        case "io.lamassu.iotcore.cert.status.update":
+          await execLambda(process.env.LAMBDA_UPDATE_IOTCORE_CERT_STATUS!, cloudEvent)
           break
 
         default:

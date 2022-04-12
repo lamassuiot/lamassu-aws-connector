@@ -14,6 +14,9 @@ type AwsConnectorClient interface {
 	RegisterCA(ctx context.Context, caName string, caSerialNumber string, caCertificate string) error
 	AttachAccessPolicy(ctx context.Context, caName string, caSerialNumber string, serializedAccessPolicy string) error
 	GetConfiguration(ctx context.Context) (AWSConfig, error)
+	GetDevicesConfiguration(ctx context.Context) (interface{}, error)
+	UpdateCaStatus(ctx context.Context, caName string) error
+	UpdateCertStatus(ctx context.Context, caName string, serialNumber string, status string) error
 }
 type AwsConnectorClientConfig struct {
 	client BaseClient
@@ -51,7 +54,7 @@ func (s *AwsConnectorClientConfig) RegisterCA(ctx context.Context, caName string
 		level.Error(s.logger).Log("err", err)
 		return err
 	}
-	_, _, err = s.client.Do(req)
+	_, err = s.client.Do(req)
 	if err != nil {
 		level.Error(s.logger).Log("err", err)
 		return err
@@ -59,7 +62,58 @@ func (s *AwsConnectorClientConfig) RegisterCA(ctx context.Context, caName string
 
 	return nil
 }
+func (s *AwsConnectorClientConfig) UpdateCaStatus(ctx context.Context, caName string) error {
+	level.Info(s.logger).Log("msg", "Update CA Status to AWS")
 
+	awsUpdateCaStatus := awsUpdateCaStatus{
+		CaName: caName,
+	}
+	awsUpdateCaStatusBytes, err := json.Marshal(awsUpdateCaStatus)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+
+	req, err := s.client.NewRequest("PUT", "/v1/ca/status", awsUpdateCaStatusBytes)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+	_, err = s.client.Do(req)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+
+	return nil
+}
+func (s *AwsConnectorClientConfig) UpdateCertStatus(ctx context.Context, caName string, serialNumber string, status string) error {
+	level.Info(s.logger).Log("msg", "Update Cert Status to AWS")
+
+	awsUpdateCertStatus := awsUpdateCertStatus{
+		CaName:       caName,
+		SerialNumber: serialNumber,
+		Status:       status,
+	}
+	awsUpdateCertStatusBytes, err := json.Marshal(awsUpdateCertStatus)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+
+	req, err := s.client.NewRequest("PUT", "/v1/cert/status", awsUpdateCertStatusBytes)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+	_, err = s.client.Do(req)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return err
+	}
+
+	return nil
+}
 func (s *AwsConnectorClientConfig) AttachAccessPolicy(ctx context.Context, caName string, caSerialNumber string, serializedAccessPolicy string) error {
 	fmt.Println("Calling attach access policy", s.ID, caName, serializedAccessPolicy)
 
@@ -81,7 +135,7 @@ func (s *AwsConnectorClientConfig) AttachAccessPolicy(ctx context.Context, caNam
 		level.Error(s.logger).Log("err", err)
 		return err
 	}
-	_, _, err = s.client.Do(req)
+	_, err = s.client.Do(req)
 	if err != nil {
 		level.Error(s.logger).Log("err", err)
 		return err
@@ -99,11 +153,33 @@ func (s *AwsConnectorClientConfig) GetConfiguration(ctx context.Context) (AWSCon
 		return AWSConfig{}, err
 	}
 
-	config, _, err = s.client.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		level.Error(s.logger).Log("err", err)
 		return AWSConfig{}, err
 	}
-
+	err = json.NewDecoder(resp.Body).Decode(&config)
 	return config, nil
+}
+
+func (s *AwsConnectorClientConfig) GetDevicesConfiguration(ctx context.Context) (interface{}, error) {
+	var v interface{}
+	req, err := s.client.NewRequest("GET", "/v1/things/config", nil)
+
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return nil, err
+	}
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		level.Error(s.logger).Log("err", err)
+		return nil, err
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&v)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }

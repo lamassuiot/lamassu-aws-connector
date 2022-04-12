@@ -14,7 +14,7 @@ export const handler = async (event: any) => {
   console.log("Registration code:", registrationCodeChallenge)
 
   const cloudEvent = new CloudEvent({
-    type: "io.lamassu.iotcore.ca.registration.reg-code",
+    type: "io.lamassu.iotcore.ca.registration.response-code",
     id: requestedCloudEvent.id,
     source: "aws/lambda",
     time: new Date().toString(),

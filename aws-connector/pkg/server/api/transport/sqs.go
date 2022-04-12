@@ -48,9 +48,11 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 	json.Unmarshal([]byte(*msg.Body), &event)
 
 	level.Info(logger).Log("msg", "Received message from SQS type="+event.Type())
+	// jsonM, _ := event.MarshalJSON()
+	// fmt.Println(string(jsonM))
 
 	switch event.Type() {
-	case "io.lamassu.iotcore.ca.registration.reg-code":
+	case "io.lamassu.iotcore.ca.registration.response-code":
 		var req endpoint.SignRegistrationCodeRequest
 		json.Unmarshal(event.Data(), &req)
 		_, err := e.SignCertificateEndpoint(context.Background(), req)
@@ -66,7 +68,17 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 		_, err := e.UpdateConfigurationEndpoint(context.Background(), req)
 		return err
 
-	case "io.lamassu.iotcore.cert.updatestatus":
+	case "io.lamassu.iotcore.thing.config.response":
+		var req endpoint.UpdateThingConfigurationRequest
+		var eventData []interface{}
+
+		json.Unmarshal(event.Data(), &eventData)
+
+		req.Config = eventData
+		_, err := e.UpdateThingsConfigurationEndpoint(context.Background(), req)
+		return err
+
+	case "io.lamassu.iotcore.cert.update-status":
 		level.Info(logger).Log("msg", event)
 
 	default:

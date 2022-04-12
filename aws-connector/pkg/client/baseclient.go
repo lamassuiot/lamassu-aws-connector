@@ -2,7 +2,6 @@ package client
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 
 type BaseClient interface {
 	NewRequest(method string, path string, body []byte) (*http.Request, error)
-	Do(req *http.Request) (AWSConfig, *http.Response, error)
+	Do(req *http.Request) (*http.Response, error)
 }
 
 type ClientConfig struct {
@@ -42,16 +41,14 @@ func (c *ClientConfig) NewRequest(method string, path string, body []byte) (*htt
 	req.Header.Set("Accept", "application/json")
 	return req, nil
 }
-func (c *ClientConfig) Do(req *http.Request) (AWSConfig, *http.Response, error) {
+func (c *ClientConfig) Do(req *http.Request) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return AWSConfig{}, nil, err
+		return nil, err
 	}
 	if resp.StatusCode != 200 {
-		return AWSConfig{}, nil, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode))
+		return nil, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode))
 	}
-	defer resp.Body.Close()
-	var config AWSConfig
-	err = json.NewDecoder(resp.Body).Decode(&config)
-	return config, resp, err
+
+	return resp, err
 }

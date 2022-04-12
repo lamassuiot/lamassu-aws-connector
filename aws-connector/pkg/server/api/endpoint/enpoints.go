@@ -13,8 +13,12 @@ type Endpoints struct {
 	DispatchAttachIoTCorePolicyEndpoint endpoint.Endpoint
 	DispatchRegistrationCodeEndpoint    endpoint.Endpoint
 	SignCertificateEndpoint             endpoint.Endpoint
+	GetThingsConfigurationEndpoint      endpoint.Endpoint
+	UpdateThingsConfigurationEndpoint   endpoint.Endpoint
 	GetConfigurationEndpoint            endpoint.Endpoint
 	UpdateConfigurationEndpoint         endpoint.Endpoint
+	DispatchDeleteCACodeEndpoint        endpoint.Endpoint
+	DispatchDeleteCertCodeEndpoint      endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -33,7 +37,14 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	{
 		dispatchRegistrationCodeEndpoint = MakeDispatchRegistrationCodeEndpoint(s)
 	}
-
+	var dispatchDeleteCACodeEndpoint endpoint.Endpoint
+	{
+		dispatchDeleteCACodeEndpoint = MakeDispatchDeleteCACodeEndpoint(s)
+	}
+	var dispatchDeleteCertCodeEndpoint endpoint.Endpoint
+	{
+		dispatchDeleteCertCodeEndpoint = MakeDispatchDeleteCertCodeEndpoint(s)
+	}
 	var signCertificateEndpoint endpoint.Endpoint
 	{
 		signCertificateEndpoint = MakeSignCertificateEndpoint(s)
@@ -42,6 +53,14 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	var getConfigurationEndpoint endpoint.Endpoint
 	{
 		getConfigurationEndpoint = MakeGetConfigurationEndpoint(s)
+	}
+	var getThingsConfigurationEndpoint endpoint.Endpoint
+	{
+		getThingsConfigurationEndpoint = MakeGetThingsConfigurationEndpoint(s)
+	}
+	var updateThingsConfigurationEndpoint endpoint.Endpoint
+	{
+		updateThingsConfigurationEndpoint = MakeUpdateThingsConfigurationEndpoint(s)
 	}
 	var updateConfigurationEndpoint endpoint.Endpoint
 	{
@@ -53,8 +72,12 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		DispatchAttachIoTCorePolicyEndpoint: dispatchAttachIoTCorePolicyEndpoint,
 		DispatchRegistrationCodeEndpoint:    dispatchRegistrationCodeEndpoint,
 		SignCertificateEndpoint:             signCertificateEndpoint,
+		GetThingsConfigurationEndpoint:      getThingsConfigurationEndpoint,
+		UpdateThingsConfigurationEndpoint:   updateThingsConfigurationEndpoint,
 		GetConfigurationEndpoint:            getConfigurationEndpoint,
 		UpdateConfigurationEndpoint:         updateConfigurationEndpoint,
+		DispatchDeleteCACodeEndpoint:        dispatchDeleteCACodeEndpoint,
+		DispatchDeleteCertCodeEndpoint:      dispatchDeleteCertCodeEndpoint,
 	}
 }
 
@@ -80,7 +103,20 @@ func MakeDispatchRegistrationCodeEndpoint(s service.Service) endpoint.Endpoint {
 		return CreateCAResponse{}, err
 	}
 }
-
+func MakeDispatchDeleteCACodeEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(DispatchUpdateCaStatusCodeRequest)
+		err := s.DispatchUpdaCAStatusCodeRequest(ctx, req.CaName, "")
+		return "OK", err
+	}
+}
+func MakeDispatchDeleteCertCodeEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(DispatchUpdateCertStatusCodeRequest)
+		err := s.DispatchUpdateCertStatusCodeRequest(ctx, req.CaName, req.SerialNumber, req.Status)
+		return "OK", err
+	}
+}
 func MakeSignCertificateEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(SignRegistrationCodeRequest)
@@ -89,6 +125,21 @@ func MakeSignCertificateEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
+func MakeGetThingsConfigurationEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(GetThingConfigurationRequest)
+		config, err := s.GetThingConfiguration(ctx, req.DeviceID)
+		return GetThingConfigurationResponse{ThingConfig: config}, err
+	}
+}
+
+func MakeUpdateThingsConfigurationEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req := request.(UpdateThingConfigurationRequest)
+		err := s.UpdateThingConfiguration(ctx, req.DeviceID, req.Config)
+		return nil, err
+	}
+}
 func MakeGetConfigurationEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		config, err := s.GetConfiguration(ctx)
@@ -100,6 +151,6 @@ func MakeUpdateConfigurationEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(UpdateConfigurationRequest)
 		err := s.UpdateConfiguration(ctx, req.Config)
-		return GetConfigurationResponse{}, err
+		return nil, err
 	}
 }

@@ -24,3 +24,23 @@ type awsIotCoreCAAttachPolicy struct {
 	CaName       string `json:"ca_name"`
 	SerialNumber string `json:"serial_number"`
 }
+type ThingsConfig struct {
+	AwsID          string            `json:"aws_id"`
+	Certificates   DeviceCertificate `json:"certificates"`
+	DeviceID       string            `json:"device_id"`
+	LastConnection string            `json:"last_connection"`
+}
+type DeviceCertificate struct {
+	ARN        string `json:"arn"`
+	Id         string `json:"id"`
+	Status     string `json:"status"`
+	UpdateDate string `json:"update_date"`
+}
+type awsUpdateCaStatus struct {
+	CaName string `json:"ca_name"`
+}
+type awsUpdateCertStatus struct {
+	CaName       string `json:"ca_name"`
+	SerialNumber string `json:"serial_number"`
+	Status       string `json:"status"`
+}

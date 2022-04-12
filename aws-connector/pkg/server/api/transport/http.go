@@ -13,6 +13,7 @@ import (
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/lamassuiot/aws-connector/pkg/server/api/endpoint"
 	"github.com/lamassuiot/aws-connector/pkg/server/api/errors"
+	lamassuErrors "github.com/lamassuiot/aws-connector/pkg/server/api/errors"
 	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
 
 	stdopentracing "github.com/opentracing/opentracing-go"
@@ -20,6 +21,13 @@ import (
 
 type errorer interface {
 	error() error
+}
+
+func ErrMissingDeviceID() error {
+	return &lamassuErrors.GenericError{
+		Message:    "Device ID not specified",
+		StatusCode: 400,
+	}
 }
 
 func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
@@ -41,21 +49,41 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		e.GetConfigurationEndpoint,
 		decodeEmptyRequest,
 		enocdeGetConnectorsResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)))...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Config", logger)))...,
+	))
+
+	r.Methods("GET").Path("/things/{deviceId}/config").Handler(httptransport.NewServer(
+		e.GetThingsConfigurationEndpoint,
+		decodeGetThingConfigRequest,
+		enocdeGetThingConnectorsResponse,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetThingsConfig", logger)))...,
 	))
 
 	r.Methods("POST").Path("/create-ca").Handler(httptransport.NewServer(
 		e.DispatchRegistrationCodeEndpoint,
 		decodeCreateCaRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)))...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CreateCA", logger)))...,
 	))
 
+	r.Methods("PUT").Path("/ca/status").Handler(httptransport.NewServer(
+		e.DispatchDeleteCACodeEndpoint,
+		decodeUpdateCaStatusRequest,
+		encodeResponse,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCA", logger)))...,
+	))
+
+	r.Methods("PUT").Path("/cert/status").Handler(httptransport.NewServer(
+		e.DispatchDeleteCertCodeEndpoint,
+		decodeUpdateCertStatusRequest,
+		encodeResponse,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCert", logger)))...,
+	))
 	r.Methods("POST").Path("/attach-policy").Handler(httptransport.NewServer(
 		e.DispatchAttachIoTCorePolicyEndpoint,
 		decodeAttachPolicyRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)))...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "AttachPolicy", logger)))...,
 	))
 
 	return r
@@ -76,7 +104,37 @@ func decodeCreateCaRequest(ctx context.Context, r *http.Request) (request interf
 
 	return createCaRequest, nil
 }
+func decodeGetThingConfigRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	deviceId, ok := vars["deviceId"]
+	if !ok {
+		return nil, ErrMissingDeviceID()
+	}
+	var requestInput endpoint.GetThingConfigurationRequest
+	requestInput.DeviceID = deviceId
 
+	return requestInput, nil
+}
+func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+
+	var deleteCaRequest endpoint.DispatchUpdateCaStatusCodeRequest
+	json.NewDecoder(r.Body).Decode(&deleteCaRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return deleteCaRequest, nil
+}
+func decodeUpdateCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+
+	var deleteCertRequest endpoint.DispatchUpdateCertStatusCodeRequest
+	json.NewDecoder(r.Body).Decode(&deleteCertRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	return deleteCertRequest, nil
+}
 func decodeAttachPolicyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var bindCAAwsPolicyRequest endpoint.DispatchAttachIoTCorePolicyRequest
 	json.NewDecoder(r.Body).Decode(&bindCAAwsPolicyRequest)
@@ -96,6 +154,17 @@ func enocdeGetConnectorsResponse(ctx context.Context, w http.ResponseWriter, res
 	getConfigResponse := response.(endpoint.GetConfigurationResponse)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	return json.NewEncoder(w).Encode(getConfigResponse.Config)
+}
+
+func enocdeGetThingConnectorsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+
+		return nil
+	}
+	getConfigResponse := response.(endpoint.GetThingConfigurationResponse)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(getConfigResponse.ThingConfig)
 }
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {

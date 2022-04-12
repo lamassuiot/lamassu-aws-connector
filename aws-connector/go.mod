@@ -12,6 +12,7 @@ require (
 	github.com/hashicorp/consul/api v1.10.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lamassuiot/lamassu-ca v1.0.10
+	github.com/mitchellh/mapstructure v1.4.2
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
