@@ -38,9 +38,12 @@ type DeviceCertificate struct {
 }
 type awsUpdateCaStatus struct {
 	CaName string `json:"ca_name"`
+	Status string `json:"status"`
 }
 type awsUpdateCertStatus struct {
-	CaName       string `json:"ca_name"`
+	DeviceID     string `json:"device_id"`
 	SerialNumber string `json:"serial_number"`
 	Status       string `json:"status"`
+	DeviceCert   string `json:"device_cert"`
+	CaCert       string `json:"ca_cert"`
 }

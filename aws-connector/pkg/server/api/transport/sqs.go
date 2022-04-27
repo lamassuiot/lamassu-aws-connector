@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -48,8 +49,8 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 	json.Unmarshal([]byte(*msg.Body), &event)
 
 	level.Info(logger).Log("msg", "Received message from SQS type="+event.Type())
-	// jsonM, _ := event.MarshalJSON()
-	// fmt.Println(string(jsonM))
+	jsonM, _ := event.MarshalJSON()
+	fmt.Println(string(jsonM))
 
 	switch event.Type() {
 	case "io.lamassu.iotcore.ca.registration.response-code":
@@ -70,16 +71,24 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 
 	case "io.lamassu.iotcore.thing.config.response":
 		var req endpoint.UpdateThingConfigurationRequest
-		var eventData []interface{}
+		var eventData service.AWSThing
 
 		json.Unmarshal(event.Data(), &eventData)
 
 		req.Config = eventData
+		req.DeviceID = eventData.DeviceID
 		_, err := e.UpdateThingsConfigurationEndpoint(context.Background(), req)
 		return err
 
 	case "io.lamassu.iotcore.cert.update-status":
-		level.Info(logger).Log("msg", event)
+		var eventData endpoint.HandleUpdateCertStatusCodeRequest
+		json.Unmarshal(event.Data(), &eventData)
+		_, err := e.HandleUpdateCertificateStatusEndpoint(context.Background(), eventData)
+		level.Info(logger).Log("msg", eventData)
+		return err
+
+	case "io.lamassu.iotcore.ca.status.update":
+		level.Info(logger).Log("msg", event.Data())
 
 	default:
 		level.Error(logger).Log("msg", "no matching evene type for incoming SQS message with type: "+event.Type())

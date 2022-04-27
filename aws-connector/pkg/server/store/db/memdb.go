@@ -91,8 +91,7 @@ func (b *BadgerDB) DeleteAWSIoTCoreConfig(ctx context.Context) error {
 
 	return err
 }
-
-func (b *BadgerDB) GetAWSIoTCoreThingConfig(ctx context.Context, deviceID string) ([]interface{}, error) {
+func (b *BadgerDB) GetAWSIoTCoreThingConfig(ctx context.Context, deviceID string) (interface{}, error) {
 	var valCopy []byte
 
 	err := b.db.View(func(txn *badger.Txn) error {
@@ -110,12 +109,12 @@ func (b *BadgerDB) GetAWSIoTCoreThingConfig(ctx context.Context, deviceID string
 	})
 
 	if err != nil {
-		return make([]interface{}, 0), err
+		return nil, err
 	}
 
-	valMap := []interface{}{}
+	var valMap interface{}
 	if err := json.Unmarshal([]byte(string(valCopy)), &valMap); err != nil {
-		return make([]interface{}, 0), err
+		return valMap, err
 	}
 
 	return valMap, nil
@@ -128,7 +127,7 @@ func (b *BadgerDB) UpdateAWSIoTCoreThingConfig(ctx context.Context, deviceID str
 			return err
 		}
 
-		e := badger.NewEntry([]byte(AWSThingConfig(deviceID)), []byte(bytes)).WithTTL(time.Hour)
+		e := badger.NewEntry([]byte(AWSThingConfig(deviceID)), []byte(bytes)).WithTTL(5 * time.Second)
 		err = txn.SetEntry(e)
 
 		return nil

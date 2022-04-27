@@ -127,13 +127,13 @@ func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request 
 }
 func decodeUpdateCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var deleteCertRequest endpoint.DispatchUpdateCertStatusCodeRequest
-	json.NewDecoder(r.Body).Decode(&deleteCertRequest)
+	var updateCertStatusRequest endpoint.DispatchUpdateCertStatusCodeRequest
+	json.NewDecoder(r.Body).Decode(&updateCertStatusRequest)
 	if err != nil {
 		return nil, err
 	}
 
-	return deleteCertRequest, nil
+	return updateCertStatusRequest, nil
 }
 func decodeAttachPolicyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var bindCAAwsPolicyRequest endpoint.DispatchAttachIoTCorePolicyRequest

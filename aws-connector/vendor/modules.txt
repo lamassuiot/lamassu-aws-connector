@@ -138,8 +138,8 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/lamassuiot/lamassu-ca v1.0.10
-github.com/lamassuiot/lamassu-ca/client
+# github.com/lamassuiot/lamassu-ca v1.0.10 => /home/ikerlan/lamassu/lamassu-ca
+github.com/lamassuiot/lamassu-ca/pkg/client
 # github.com/mattn/go-colorable v0.1.8
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.14

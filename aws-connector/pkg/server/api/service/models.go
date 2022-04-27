@@ -1,6 +1,8 @@
 package service
 
-import "time"
+import (
+	"time"
+)
 
 // Define message structure for BIND_CA_AWS_POLICY --> changing on cloud_events
 type JsonRPC struct {
@@ -31,10 +33,15 @@ type RegCodeResponse struct {
 	CaCert           string `json:"ca_cert"`
 }
 
+type AWSThing struct {
+	DeviceID string         `json:"device_id"`
+	Status   int            `json:"status"`
+	Config   AWSThingConfig `json:"config,omitempty"`
+}
+
 type AWSThingConfig struct {
 	AWSThingID     string                `json:"aws_id"`
 	Certificates   []AWSThingCertificate `json:"certificates"`
-	DeviceID       string                `json:"device_id"`
 	LastConnection int                   `json:"last_connection"`
 }
 
@@ -44,4 +51,13 @@ type AWSThingCertificate struct {
 	SerialNumber string    `json:"serial_number"`
 	Status       string    `json:"status"`
 	UpdateDate   time.Time `json:"update_date"`
+}
+type UpdateCertificate struct {
+	CaID             string `json:"ca_id"`
+	CaName           string `json:"ca_name"`
+	CaSerialNumber   string `json:"ca_serial_number"`
+	CertSerialNumber string `json:"serial_number"`
+	CertID           string `json:"certificate_id"`
+	DeviceID         string `json:"device_id"`
+	Status           string `json:"status"`
 }

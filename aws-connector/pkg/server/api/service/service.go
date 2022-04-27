@@ -10,15 +10,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	lamassuErrors "github.com/lamassuiot/aws-connector/pkg/server/api/errors"
 	"github.com/lamassuiot/aws-connector/pkg/server/store"
-	lamassucaclient "github.com/lamassuiot/lamassu-ca/client"
+	lamassucaclient "github.com/lamassuiot/lamassu-ca/pkg/client"
 
 	"github.com/opentracing/opentracing-go"
 )
@@ -31,17 +31,18 @@ type Service interface {
 	DispatchRegistrationCodeRequest(ctx context.Context, CaCert string, caName string, SerialNumber string) error
 	DispatchGetConfiguration(ctx context.Context) error
 	DispatchGetThingConfiguration(ctx context.Context, deviceID string) error
-	DispatchUpdaCAStatusCodeRequest(ctx context.Context, caName string, status string) error
-	DispatchUpdateCertStatusCodeRequest(ctx context.Context, caName string, certSerialNumber string, status string) error
+	DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string) error
+	DispatchUpdateCertStatusRequest(ctx context.Context, caName string, certSerialNumber string, status string, deviceCert string, caCert string) error
 
 	//Responses received from AWS via SQS
-	SignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error
-	UpdateConfiguration(ctx context.Context, config interface{}) error
-	UpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error
+	HandleSignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error
+	HandleUpdateConfiguration(ctx context.Context, config interface{}) error
+	HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error
+	HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error
 
 	// HTTP methods
 	GetConfiguration(ctx context.Context) (map[string]interface{}, error)
-	GetThingConfiguration(ctx context.Context, deviceID string) (AWSThingConfig, error)
+	GetThingConfiguration(ctx context.Context, deviceID string) (AWSThing, error)
 }
 
 type awsService struct {
@@ -69,11 +70,11 @@ func (s *awsService) Health(ctx context.Context) bool {
 func (s *awsService) DispatchAttachIoTCorePolicy(ctx context.Context, caName string, SerialNumber string, Policy string) error {
 
 	attachPolicyContent := struct {
-		caName       string `json:"ca_name"`
+		CaName       string `json:"ca_name"`
 		SerialNumber string `json:"serial_number"`
 		Policy       string `json:"policy"`
 	}{
-		caName:       caName,
+		CaName:       caName,
 		SerialNumber: SerialNumber,
 		Policy:       Policy,
 	}
@@ -96,10 +97,10 @@ func (s *awsService) DispatchAttachIoTCorePolicy(ctx context.Context, caName str
 func (s *awsService) DispatchRegistrationCodeRequest(ctx context.Context, CaCert string, caName string, SerialNumber string) error {
 	initializeCARegistration := struct {
 		CaCert       string `json:"ca_cert"`
-		caName       string `json:"ca_name"`
+		CaName       string `json:"ca_name"`
 		SerialNumber string `json:"serial_number"`
 	}{
-		caName:       caName,
+		CaName:       caName,
 		CaCert:       CaCert,
 		SerialNumber: SerialNumber,
 	}
@@ -115,49 +116,97 @@ func (s *awsService) DispatchRegistrationCodeRequest(ctx context.Context, CaCert
 	}
 	return nil
 }
-func (s *awsService) DispatchUpdaCAStatusCodeRequest(ctx context.Context, caName string, status string) error {
-	return nil
-}
-func (s *awsService) DispatchUpdateCertStatusCodeRequest(ctx context.Context, caName string, certSerialNumber string, status string) error {
+
+func (s *awsService) DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string) error {
 	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
 	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
-	deviceCert, err := s.LamassuCaClient.GetCert(ctx, caName, certSerialNumber, "pki")
+
+	updateStatus := struct {
+		CaName string `json:"ca_name"`
+		Status string `json:"status"`
+	}{
+		CaName: caName,
+		Status: status,
+	}
+	event := cloudevents.NewEvent()
+	event.SetType("io.lamassu.iotcore.ca.status.update")
+	event.SetData(cloudevents.ApplicationJSON, updateStatus)
+
+	// Sending message to SQS
+	err := SendSQSMessage(s, event)
 	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "could not get the device certificate")
+		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
 		return err
 	}
+	err = s.db.DeleteAWSIoTCoreConfig(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
-	deviceID := deviceCert.Subject.CN
+func (s *awsService) DispatchUpdateCertStatusRequest(ctx context.Context, deviceID string, certSerialNumber string, status string, deviceCert string, caCert string) error {
+	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
+	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
 
-	thingConfig, err := s.GetThingConfiguration(ctx, deviceID)
+	thing, err := s.GetThingConfiguration(ctx, deviceID)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "could not get the aws thing config")
 		return err
-	}
+	} else if thing.Status == 404 {
+		updateStatus := struct {
+			CertificateID string `json:"certificate_id"`
+			DeviceID      string `json:"device_id"`
+			Status        string `json:"status"`
+			DeviceCert    string `json:"device_cert"`
+			CaCert        string `json:"ca_cert"`
+		}{
+			CertificateID: "",
+			DeviceID:      deviceID,
+			Status:        status,
+			DeviceCert:    deviceCert,
+			CaCert:        caCert,
+		}
+		event := cloudevents.NewEvent()
+		event.SetType("io.lamassu.iotcore.cert.status.update")
+		event.SetData(cloudevents.ApplicationJSON, updateStatus)
+		err = SendSQSMessage(s, event)
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
+			return err
+		}
+	} else {
+		fmt.Println(deviceID, thing)
+		for _, thingCert := range thing.Config.Certificates {
+			if thingCert.SerialNumber == certSerialNumber {
+				updateStatus := struct {
+					CertificateID string `json:"certificate_id"`
+					DeviceID      string `json:"device_id"`
+					Status        string `json:"status"`
+					DeviceCert    string `json:"device_cert"`
+					CaCert        string `json:"ca_cert"`
+				}{
+					CertificateID: thingCert.ID,
+					DeviceID:      deviceID,
+					Status:        status,
+					DeviceCert:    "",
+					CaCert:        "",
+				}
+				event := cloudevents.NewEvent()
+				event.SetType("io.lamassu.iotcore.cert.status.update")
+				event.SetData(cloudevents.ApplicationJSON, updateStatus)
 
-	fmt.Println(deviceID, thingConfig)
-	for _, thingCert := range thingConfig.Certificates {
-		if thingCert.SerialNumber == certSerialNumber {
-			updateStatus := struct {
-				CertificateID string `json:"certificate_id"`
-				Status        string `json:"status"`
-			}{
-				CertificateID: thingCert.ID,
-				Status:        status,
-			}
-			event := cloudevents.NewEvent()
-			event.SetType("io.lamassu.iotcore.cert.status.update")
-			event.SetData(cloudevents.ApplicationJSON, updateStatus)
-
-			// Sending message to SQS
-			err = SendSQSMessage(s, event)
-			if err != nil {
-				level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-				return err
+				// Sending message to SQS
+				err = SendSQSMessage(s, event)
+				if err != nil {
+					level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
+					return err
+				}
 			}
 		}
 	}
 
+	s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
 	return nil
 }
 func (s *awsService) DispatchGetConfiguration(ctx context.Context) error {
@@ -196,9 +245,15 @@ func (s *awsService) DispatchGetThingConfiguration(ctx context.Context, deviceID
 }
 
 func (s *awsService) GetConfiguration(ctx context.Context) (map[string]interface{}, error) {
+	var stop bool
 	getConfigurationWithRetry := func(ctx context.Context) map[string]interface{} {
+		var config map[string]interface{}
+		var err error
 		for {
-			config, err := s.db.GetAWSIoTCoreConfig(ctx)
+			if stop {
+				break
+			}
+			config, err = s.db.GetAWSIoTCoreConfig(ctx)
 			// fmt.Print(err)
 			if err == nil {
 				// s.db.DeleteAWSIoTCoreConfig(ctx)
@@ -207,6 +262,7 @@ func (s *awsService) GetConfiguration(ctx context.Context) (map[string]interface
 
 			time.Sleep(1 * time.Second)
 		}
+		return config
 	}
 
 	if _, err := s.db.GetAWSIoTCoreConfig(ctx); err != nil {
@@ -224,59 +280,74 @@ func (s *awsService) GetConfiguration(ctx context.Context) (map[string]interface
 	case conf := <-config:
 		return conf, nil
 	case <-ctx.Done():
-		return make(map[string]interface{}), errors.New("timeout while geting config")
+		stop = true
+		return make(map[string]interface{}), &lamassuErrors.GenericError{
+			StatusCode: 404,
+			Message:    "timeout while geting config from AWS",
+		}
 	}
 }
 
-func (s *awsService) GetThingConfiguration(ctx context.Context, deviceID string) (AWSThingConfig, error) {
-	getConfigurationWithRetry := func(ctx context.Context) []interface{} {
+func (s *awsService) GetThingConfiguration(ctx context.Context, deviceID string) (AWSThing, error) {
+	var stop bool
+	getConfigurationWithRetry := func(ctx context.Context) interface{} {
+		var config interface{}
+		var err error
 		for {
-			config, err := s.db.GetAWSIoTCoreThingConfig(ctx, deviceID)
-			fmt.Print(err)
+			if stop {
+				break
+			}
+			config, err = s.db.GetAWSIoTCoreThingConfig(ctx, deviceID)
 			if err == nil {
-				s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
 				return config
 			}
 
 			time.Sleep(1 * time.Second)
 		}
+		return config
 	}
 
-	s.DispatchGetThingConfiguration(ctx, deviceID)
+	if _, err := s.db.GetAWSIoTCoreThingConfig(ctx, deviceID); err != nil {
+		s.DispatchGetThingConfiguration(ctx, deviceID)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
-	config := make(chan []interface{}, 1)
+	config := make(chan interface{}, 1)
 	go func() {
 		config <- getConfigurationWithRetry(ctx)
 	}()
 	select {
 	case conf := <-config:
-		var thingConfig AWSThingConfig
+		var thing AWSThing
 		confBytes, err := json.Marshal(conf)
 		if err != nil {
 			s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
-			return AWSThingConfig{}, err
+			return AWSThing{}, err
 		}
-		json.Unmarshal(confBytes, &thingConfig)
-		return thingConfig, nil
+		json.Unmarshal(confBytes, &thing)
+		return thing, nil
 	case <-ctx.Done():
-		return AWSThingConfig{}, errors.New("timeout while geting config")
+		stop = true
+		return AWSThing{}, &lamassuErrors.GenericError{
+			StatusCode: 404,
+			Message:    "timeout while geting device config from AWS",
+		}
 	}
 }
 
-func (s *awsService) UpdateConfiguration(ctx context.Context, config interface{}) error {
+func (s *awsService) HandleUpdateConfiguration(ctx context.Context, config interface{}) error {
 	s.db.UpdateAWSIoTCoreConfig(ctx, config)
 	return nil
 }
 
-func (s *awsService) UpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error {
+func (s *awsService) HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error {
 	s.db.UpdateAWSIoTCoreThingConfig(ctx, deviceID, config)
 	return nil
 }
 
-func (s *awsService) SignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error {
+func (s *awsService) HandleSignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error {
 	// Generate CSR template for CA verification certificate
 	subj := pkix.Name{
 		CommonName: RegistrationCode,
@@ -319,11 +390,11 @@ func (s *awsService) SignRegistrationCode(ctx context.Context, RegistrationCode 
 
 	finializeCARegistrationProcessContent := struct {
 		CaCert           string `json:"ca_cert"`
-		caName           string `json:"ca_name"`
+		CaName           string `json:"ca_name"`
 		SerialNumber     string `json:"serial_number"`
 		VerificationCert string `json:"verification_cert"`
 	}{
-		caName:           caName,
+		CaName:           caName,
 		SerialNumber:     SerialNumber,
 		CaCert:           CaCert,
 		VerificationCert: base64.StdEncoding.EncodeToString(certPEM),
@@ -341,5 +412,21 @@ func (s *awsService) SignRegistrationCode(ctx context.Context, RegistrationCode 
 
 	s.db.DeleteAWSIoTCoreConfig(ctx)
 
+	return nil
+}
+func (s *awsService) HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error {
+	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
+	if status == "REVOKED" {
+		err := s.LamassuCaClient.RevokeCert(ctx, caName, serialNumber, "pki")
+		if err != nil {
+			switch err.(type) {
+			case *lamassucaclient.AlreadyRevokedError:
+				return nil
+			default:
+				return err
+			}
+
+		}
+	}
 	return nil
 }

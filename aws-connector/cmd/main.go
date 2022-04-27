@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	lamassucaclient "github.com/lamassuiot/lamassu-ca/client"
+	lamassucaclient "github.com/lamassuiot/lamassu-ca/pkg/client"
 )
 
 func main() {
