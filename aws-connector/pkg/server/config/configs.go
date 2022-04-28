@@ -6,9 +6,6 @@ import "github.com/kelseyhightower/envconfig"
 // Esto podria ser la config de un consumer
 // Puede que cambie para publisher
 type Config struct {
-	Host string `required:"true" split_words:"true"`
-	Port string `required:"true" split_words:"true"`
-
 	ConnectorPort           string `required:"true" split_words:"true"`
 	ConnectorType           string `required:"true" split_words:"true"`
 	ConnectorProtocol       string `required:"true" split_words:"true"`

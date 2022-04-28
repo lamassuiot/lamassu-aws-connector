@@ -42,10 +42,8 @@ AMQP_CLIENT_KEY=/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/aws-c
 # Lamassu CA configuration
 LAMASSU_CA_ADDRESS=https://lamassu-ca:8087
 LAMASSU_CA_CERT_FILE=/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/ca.crt
-
-# REVISARR !!!!!
-PORT=5671
-HOST=dev-lamassu.zpd.ikerlan.es
+LAMASSU_CA_CLIENT_CERT_FILE=/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/aws-connector/tls.crt
+LAMASSU_CA_CLIENT_KEY_FILE=/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/aws-connector/tls.key
 
 # Consul configuration
 CONSUL_PROTOCOL=https

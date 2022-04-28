@@ -12,8 +12,9 @@
 | **Event Type**                                                          | **Source**                            | **Description** |
 |-------------------------------------------------------------------------|---------------------------------------|-----------------|
 | io.lamassu.ca.create                                                    | lamassu/ca                            |                 |
-| io.lamassu.ca.revoke                                                    | lamassu/ca                            |                 |
-| io.lamassu.cert.revoke                                                  | lamassu/ca                            |                 |
+| io.lamassu.ca.import                                                    | lamassu/ca                            |                 |
+| io.lamassu.ca.update                                                    | lamassu/ca                            |                 |
+| io.lamassu.cert.update                                                  | lamassu/ca                            |                 |
 | [io.lamassu.iotcore.config.request](#io.lamassu.iotcore.config.request) | lamassu/aws-connector/${connector-id} |                 |
 | io.lamassu.iotcore.config.response                                      | aws/lambda                            |                 |
 | io.lamassu.iotcore.ca.registration.request-code                         | lamassu/aws-connector/${connector-id} |                 |
@@ -60,36 +61,36 @@
 }
 ```
 
-### io.lamassu.ca.delete
+### io.lamassu.ca.update
 
 ```json 
 {
     "specversion":"1.0",
     "id":"208e73dd2a283350:208e73dd2a283350:0000000000000000:1",
     "source":"lamassu/ca",
-    "type":"io.lamassu.ca.delete",
+    "type":"io.lamassu.ca.update",
 	"datacontenttype":"application/json",
 	"time":"2022-03-31T07:10:55.371676082Z",
     "data":{
         "name":"CA2",
-        "ca_type": "_pki/"
+        "status": "REVOKED"
     }    
 }
 ```
 
-### io.lamassu.delete.cert
+### io.lamassu.cert.update
 
 ```json 
 {
     "specversion":"1.0",
     "id":"0814bee304159b19:0814bee304159b19:0000000000000000:1",
     "source":"lamassu/ca",
-    "type":"io.lamassu.delete.cert",
+    "type":"io.lamassu.cert.update",
 	"datacontenttype":"application/json",
 	"time":"2022-03-31T07:17:36.907957488Z",
     "data":{
         "name":"CA2",
-        "ca_type": "_pki/",
+        "status": "REVOKED",
         "serial_number":"23-f9-3e-b0-9c-0e-f7-6b-1d-d9-0f-a2-22-47-93-45-23-53-f1-03"
     }    
 }
