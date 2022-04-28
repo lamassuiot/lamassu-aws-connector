@@ -31,7 +31,7 @@ type Service interface {
 	DispatchRegistrationCodeRequest(ctx context.Context, CaCert string, caName string, SerialNumber string) error
 	DispatchGetConfiguration(ctx context.Context) error
 	DispatchGetThingConfiguration(ctx context.Context, deviceID string) error
-	DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string) error
+	DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error
 	DispatchUpdateCertStatusRequest(ctx context.Context, caName string, certSerialNumber string, status string, deviceCert string, caCert string) error
 
 	//Responses received from AWS via SQS
@@ -39,6 +39,7 @@ type Service interface {
 	HandleUpdateConfiguration(ctx context.Context, config interface{}) error
 	HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error
 	HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error
+	HandleUpdateCAStatus(ctx context.Context, caName string, caSerialNumber string, caID string, status string) error
 
 	// HTTP methods
 	GetConfiguration(ctx context.Context) (map[string]interface{}, error)
@@ -117,16 +118,18 @@ func (s *awsService) DispatchRegistrationCodeRequest(ctx context.Context, CaCert
 	return nil
 }
 
-func (s *awsService) DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string) error {
+func (s *awsService) DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error {
 	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
 	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
-
+	if status == "REVOKED" {
+		status = "INACTIVE"
+	}
 	updateStatus := struct {
-		CaName string `json:"ca_name"`
-		Status string `json:"status"`
+		CertificateID string `json:"certificate_id"`
+		Status        string `json:"status"`
 	}{
-		CaName: caName,
-		Status: status,
+		CertificateID: certificateID,
+		Status:        status,
 	}
 	event := cloudevents.NewEvent()
 	event.SetType("io.lamassu.iotcore.ca.status.update")
@@ -148,62 +151,22 @@ func (s *awsService) DispatchUpdateCAStatusRequest(ctx context.Context, caName s
 func (s *awsService) DispatchUpdateCertStatusRequest(ctx context.Context, deviceID string, certSerialNumber string, status string, deviceCert string, caCert string) error {
 	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
 	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
+	updateStatus := CertUpdateStatus{
+		SerialNumber: certSerialNumber,
+		DeviceID:     deviceID,
+		Status:       status,
+		DeviceCert:   deviceCert,
+		CaCert:       caCert,
+	}
+	event := cloudevents.NewEvent()
+	event.SetType("io.lamassu.iotcore.cert.status.update")
+	event.SetData(cloudevents.ApplicationJSON, updateStatus)
 
-	thing, err := s.GetThingConfiguration(ctx, deviceID)
+	// Sending message to SQS
+	err := SendSQSMessage(s, event)
 	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "could not get the aws thing config")
+		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
 		return err
-	} else if thing.Status == 404 {
-		updateStatus := struct {
-			CertificateID string `json:"certificate_id"`
-			DeviceID      string `json:"device_id"`
-			Status        string `json:"status"`
-			DeviceCert    string `json:"device_cert"`
-			CaCert        string `json:"ca_cert"`
-		}{
-			CertificateID: "",
-			DeviceID:      deviceID,
-			Status:        status,
-			DeviceCert:    deviceCert,
-			CaCert:        caCert,
-		}
-		event := cloudevents.NewEvent()
-		event.SetType("io.lamassu.iotcore.cert.status.update")
-		event.SetData(cloudevents.ApplicationJSON, updateStatus)
-		err = SendSQSMessage(s, event)
-		if err != nil {
-			level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-			return err
-		}
-	} else {
-		fmt.Println(deviceID, thing)
-		for _, thingCert := range thing.Config.Certificates {
-			if thingCert.SerialNumber == certSerialNumber {
-				updateStatus := struct {
-					CertificateID string `json:"certificate_id"`
-					DeviceID      string `json:"device_id"`
-					Status        string `json:"status"`
-					DeviceCert    string `json:"device_cert"`
-					CaCert        string `json:"ca_cert"`
-				}{
-					CertificateID: thingCert.ID,
-					DeviceID:      deviceID,
-					Status:        status,
-					DeviceCert:    "",
-					CaCert:        "",
-				}
-				event := cloudevents.NewEvent()
-				event.SetType("io.lamassu.iotcore.cert.status.update")
-				event.SetData(cloudevents.ApplicationJSON, updateStatus)
-
-				// Sending message to SQS
-				err = SendSQSMessage(s, event)
-				if err != nil {
-					level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-					return err
-				}
-			}
-		}
 	}
 
 	s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
@@ -335,6 +298,12 @@ func (s *awsService) GetThingConfiguration(ctx context.Context, deviceID string)
 			Message:    "timeout while geting device config from AWS",
 		}
 	}
+}
+
+func (s *awsService) HandleUpdateCAStatus(ctx context.Context, caName string, caSerialNumber string, caID string, status string) error {
+	level.Info(s.logger).Log("msg", "invalidating config cache due to CA update. caName:"+caName+" caSerialNumber:"+caSerialNumber+" caID:"+caID+" status:"+status)
+	s.db.DeleteAWSIoTCoreConfig(ctx)
+	return nil
 }
 
 func (s *awsService) HandleUpdateConfiguration(ctx context.Context, config interface{}) error {

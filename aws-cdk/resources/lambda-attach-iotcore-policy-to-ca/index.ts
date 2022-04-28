@@ -52,8 +52,8 @@ const returnIoTCoreCATemplate = (policyName: string) => {
 
 export const handler = async (event: any) => {
   console.log(event)
-
   const requestedCloudEvent = new CloudEvent<any>(event)
+
   try {
     const listCAsResponse = await iot.listCACertificates({ ascendingOrder: true, pageSize: 30 }).promise()
     console.log(listCAsResponse.certificates)
@@ -67,9 +67,10 @@ export const handler = async (event: any) => {
               const nameTag = tagsResponse.tags.find(tag => tag.Key === "lamassuCAName")
               if (nameTag && nameTag.Value === requestedCloudEvent.data.ca_name) {
                 const policyName = "lamassulambdapolicy_" + requestedCloudEvent.data.ca_name + "_" + Date.now()
+                console.log("creating policy: " + policyName)
                 try {
                   await iot.createPolicy({
-                    policyDocument: requestedCloudEvent.data.policy,
+                    policyDocument: JSON.stringify(JSON.parse(requestedCloudEvent.data.policy)),
                     policyName: policyName,
                     tags: [{
                       Key: "serialNumber",
@@ -77,6 +78,7 @@ export const handler = async (event: any) => {
                     }]
                   }).promise()
 
+                  console.log("updating CA certificate with ID" + ca.certificateId)
                   try {
                     await iot.updateCACertificate({
                       certificateId: ca.certificateId,

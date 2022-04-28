@@ -51,6 +51,7 @@ type AWSThingCertificate struct {
 	SerialNumber string    `json:"serial_number"`
 	Status       string    `json:"status"`
 	UpdateDate   time.Time `json:"update_date"`
+	CaName       string    `json:"ca_name"`
 }
 type UpdateCertificate struct {
 	CaID             string `json:"ca_id"`
@@ -60,4 +61,11 @@ type UpdateCertificate struct {
 	CertID           string `json:"certificate_id"`
 	DeviceID         string `json:"device_id"`
 	Status           string `json:"status"`
+}
+type CertUpdateStatus struct {
+	SerialNumber string `json:"serial_number"`
+	DeviceID     string `json:"device_id"`
+	Status       string `json:"status"`
+	DeviceCert   string `json:"device_cert"`
+	CaCert       string `json:"ca_cert"`
 }

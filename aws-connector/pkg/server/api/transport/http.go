@@ -67,17 +67,17 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	))
 
 	r.Methods("PUT").Path("/ca/status").Handler(httptransport.NewServer(
-		e.DispatchDeleteCACodeEndpoint,
+		e.DispatchUpdateCAStatusEndpoint,
 		decodeUpdateCaStatusRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCA", logger)))...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCAStatus", logger)))...,
 	))
 
 	r.Methods("PUT").Path("/cert/status").Handler(httptransport.NewServer(
-		e.DispatchDeleteCertCodeEndpoint,
+		e.DispatchUpdateCertStatusEndpoint,
 		decodeUpdateCertStatusRequest,
 		encodeResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCert", logger)))...,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCertStatus", logger)))...,
 	))
 	r.Methods("POST").Path("/attach-policy").Handler(httptransport.NewServer(
 		e.DispatchAttachIoTCorePolicyEndpoint,
@@ -117,7 +117,7 @@ func decodeGetThingConfigRequest(ctx context.Context, r *http.Request) (request 
 }
 func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var deleteCaRequest endpoint.DispatchUpdateCaStatusCodeRequest
+	var deleteCaRequest endpoint.DispatchUpdateCaStatusRequest
 	json.NewDecoder(r.Body).Decode(&deleteCaRequest)
 	if err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request 
 }
 func decodeUpdateCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var updateCertStatusRequest endpoint.DispatchUpdateCertStatusCodeRequest
+	var updateCertStatusRequest endpoint.DispatchUpdateCertStatusRequest
 	json.NewDecoder(r.Body).Decode(&updateCertStatusRequest)
 	if err != nil {
 		return nil, err

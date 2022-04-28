@@ -10,11 +10,22 @@ export const handler = async (event: any) => {
   const deviceID = requestedCloudEvent.data.device_id
   console.log(deviceID)
 
-  const things: Array<any> = []
+  let thingResult: undefined | any
   const searchResponse = await iot.searchIndex({ queryString: `thingName:${deviceID}` }).promise()
-  console.log(searchResponse)
-
-  for (const thing of searchResponse.things!) {
+  if (searchResponse.things!.length === 0) {
+    console.log("No results with device ID (" + deviceID + ")")
+    thingResult = {
+      device_id: deviceID,
+      status: 404
+    }
+  } else if (searchResponse.things!.length !== 1) {
+    console.log("Inconsistent thing repo: More than one result for the same device ID (" + deviceID + ")")
+    thingResult = {
+      device_id: deviceID,
+      status: 409
+    }
+  } else {
+    const thing = searchResponse.things![0]
     const principalResponse = await iot.listThingPrincipals({ thingName: thing.thingName!, maxResults: 25 }).promise()
     const certificates = []
     const principals = principalResponse.principals
@@ -24,25 +35,27 @@ export const handler = async (event: any) => {
       const certificateResponse = await iot.describeCertificate({ certificateId: certificateID }).promise()
       const certPem = certificateResponse.certificateDescription!.certificatePem!
 
-      const caCert = Certificate.fromPEM(Buffer.from(certPem, "utf8"))
+      const cert = Certificate.fromPEM(Buffer.from(certPem, "utf8"))
 
       certificates.push({
-        serial_number: chunk(caCert.serialNumber, 2).join("-"),
+        serial_number: chunk(cert.serialNumber, 2).join("-"),
         status: certificateResponse.certificateDescription!.status,
         arn: certificateResponse.certificateDescription!.certificateArn,
         id: certificateResponse.certificateDescription!.certificateId,
-        update_date: certificateResponse.certificateDescription!.lastModifiedDate
+        update_date: certificateResponse.certificateDescription!.lastModifiedDate,
+        ca_name: cert.issuer.commonName
       })
     }
 
-    things.push(
-      {
+    thingResult = {
+      device_id: thing.thingName,
+      status: 200,
+      config: {
         aws_id: thing.thingId,
-        device_id: thing.thingName,
         last_connection: thing.connectivity?.timestamp,
         certificates: certificates
       }
-    )
+    }
   }
 
   const cloudEvent = new CloudEvent({
@@ -51,7 +64,7 @@ export const handler = async (event: any) => {
     source: "aws/lambda",
     time: new Date().toString(),
     specversion: "1.0",
-    data: things
+    data: thingResult
   })
   try {
     console.log("Cloud Event", cloudEvent)

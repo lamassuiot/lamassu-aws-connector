@@ -7,7 +7,7 @@ export const handler = async (event: any) => {
   console.log(event)
 
   const requestedCloudEvent = new CloudEvent<any>(event)
-  const newRequestedStatus = requestedCloudEvent.data.new_status
+  const newRequestedStatus = requestedCloudEvent.data.status
 
   if (newRequestedStatus === "ACTIVE" || newRequestedStatus === "INACTIVE") {
     await iot.updateCACertificate({ newStatus: newRequestedStatus, certificateId: requestedCloudEvent.data.certificate_id }).promise()

@@ -39,7 +39,6 @@ func pollMessages(chn chan<- *sqs.Message, logger log.Logger) {
 		for _, message := range output.Messages {
 			chn <- message
 		}
-
 	}
 
 }
@@ -80,15 +79,19 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 		_, err := e.UpdateThingsConfigurationEndpoint(context.Background(), req)
 		return err
 
-	case "io.lamassu.iotcore.cert.update-status":
+	case "io.lamassu.iotcore.cert.status.update":
 		var eventData endpoint.HandleUpdateCertStatusCodeRequest
 		json.Unmarshal(event.Data(), &eventData)
 		_, err := e.HandleUpdateCertificateStatusEndpoint(context.Background(), eventData)
-		level.Info(logger).Log("msg", eventData)
+		level.Debug(logger).Log("msg", eventData)
 		return err
 
 	case "io.lamassu.iotcore.ca.status.update":
-		level.Info(logger).Log("msg", event.Data())
+		var eventData endpoint.HandleUpdateCAStatusCodeRequest
+		json.Unmarshal(event.Data(), &eventData)
+		_, err := e.HandleUpdateCAStatusEndpoint(context.Background(), eventData)
+		level.Debug(logger).Log("msg", eventData)
+		return err
 
 	default:
 		level.Error(logger).Log("msg", "no matching evene type for incoming SQS message with type: "+event.Type())

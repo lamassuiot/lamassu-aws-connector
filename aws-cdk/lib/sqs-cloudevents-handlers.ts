@@ -145,6 +145,24 @@ export class LamassuSQSEventHandler extends cdk.Construct {
       resources: ["*"]
     }))
 
+    const updateIotCoreCAStatusLambda = new lambdaNodeJS.NodejsFunction(this, "UpdateIoTCoreCAStatus", {
+      entry: path.join(__dirname, "../resources/lambda-iotcore-update-ca-status/index.ts"),
+      runtime: lambda.Runtime.NODEJS_14_X,
+      handler: "handler",
+      bundling: {
+        nodeModules: [
+          "cloudevents"
+        ]
+      }
+    })
+
+    updateIotCoreCAStatusLambda.addToRolePolicy(new iam.PolicyStatement({
+      actions: [
+        "iot:UpdateCACertificate"
+      ],
+      resources: ["*"]
+    }))
+
     const updateIotCoreCertificateStatusLambda = new lambdaNodeJS.NodejsFunction(this, "UpdateIoTCoreCertStatus", {
       entry: path.join(__dirname, "../resources/lambda-iotcore-update-certificate-status/index.ts"),
       runtime: lambda.Runtime.NODEJS_14_X,
@@ -158,7 +176,13 @@ export class LamassuSQSEventHandler extends cdk.Construct {
 
     updateIotCoreCertificateStatusLambda.addToRolePolicy(new iam.PolicyStatement({
       actions: [
-        "iot:UpdateCertificate"
+        "iot:SearchIndex",
+        "iot:ListThingPrincipals",
+        "iot:DescribeCertificate",
+        "iot:UpdateCertificate",
+        "iot:CreateThing",
+        "iot:RegisterCertificate",
+        "iot:AttachThingPrincipal"
       ],
       resources: ["*"]
     }))
@@ -174,6 +198,7 @@ export class LamassuSQSEventHandler extends cdk.Construct {
         ]
       },
       environment: {
+        LAMBDA_UPDATE_IOTCORE_CA_STATUS: updateIotCoreCAStatusLambda.functionArn,
         LAMBDA_CA_REGISTRATION_INIT: getRegistrationCodeLambda.functionArn,
         LAMBDA_IMPORT_IOTCORE_CA: importIoTCoreCALambda.functionArn,
         LAMBDA_ATTACH_IOTCORE_CA_POLICY: attachIoTCorePolicyToCALambda.functionArn,
@@ -195,6 +220,7 @@ export class LamassuSQSEventHandler extends cdk.Construct {
         "lambda:InvokeFunction"
       ],
       resources: [
+        updateIotCoreCAStatusLambda.functionArn,
         getRegistrationCodeLambda.functionArn,
         importIoTCoreCALambda.functionArn,
         attachIoTCorePolicyToCALambda.functionArn,

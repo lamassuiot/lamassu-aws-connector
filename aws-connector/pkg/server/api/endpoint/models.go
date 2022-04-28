@@ -21,11 +21,12 @@ type DispatchRegistrationCodeRequestRequest struct {
 	CaCert       string `json:"ca_cert"`
 	SerialNumber string `json:"serial_number"`
 }
-type DispatchUpdateCaStatusCodeRequest struct {
-	CaName string `json:"ca_name"`
-	Status string `json:"status"`
+type DispatchUpdateCaStatusRequest struct {
+	CaName        string `json:"ca_name"`
+	Status        string `json:"status"`
+	CertificateID string `json:"certificate_id"`
 }
-type DispatchUpdateCertStatusCodeRequest struct {
+type DispatchUpdateCertStatusRequest struct {
 	DeviceID     string `json:"device_id"`
 	Status       string `json:"status"`
 	SerialNumber string `json:"serial_number"`
@@ -64,4 +65,10 @@ type HandleUpdateCertStatusCodeRequest struct {
 	CaName       string `json:"ca_name"`
 	Status       string `json:"status"`
 	SerialNumber string `json:"serial_number"`
+}
+type HandleUpdateCAStatusCodeRequest struct {
+	CaID           string `json:"ca_id"`
+	CaName         string `json:"ca_name"`
+	CaSerialNumber string `json:"ca_serial_number"`
+	Status         string `json:"status"`
 }

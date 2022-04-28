@@ -20,6 +20,9 @@ export const handler = async (event: SQSEvent, context: Context) => {
         case "io.lamassu.iotcore.ca.policy.attach":
           await execLambda(process.env.LAMBDA_ATTACH_IOTCORE_CA_POLICY!, cloudEvent)
           break
+        case "io.lamassu.iotcore.ca.status.update":
+          await execLambda(process.env.LAMBDA_UPDATE_IOTCORE_CA_STATUS!, cloudEvent)
+          break
         case "io.lamassu.iotcore.config.request":
           await execLambda(process.env.LAMBDA_GET_IOTCORE_CONFIG!, cloudEvent)
           break

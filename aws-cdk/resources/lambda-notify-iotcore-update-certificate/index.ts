@@ -25,17 +25,20 @@ export const handler = async (event: any) => {
   console.log("deviceID: [" + deviceID + "] newStatus:[" + newStatus + "]")
 
   const cloudEvent = new CloudEvent({
-    type: "io.lamassu.iotcore.cert.update-status",
+    type: "io.lamassu.iotcore.cert.status.update",
     id: "",
     source: "aws/cloud-trail",
     time: new Date().toString(),
     specversion: "1.0",
     data: {
-      caID: describeCertResponse.certificateDescription!.caCertificateId,
-      caName: caCert.subject.commonName,
-      caSerialNumber: caCert.serialNumber,
-      certificateID: certificateId,
-      deviceID: deviceID
+      ca_id: describeCertResponse.certificateDescription!.caCertificateId,
+      ca_name: caCert.subject.commonName,
+      ca_serial_number: chunk(caCert.serialNumber, 2).join("-"),
+      certificate_id: certificateId,
+      serial_number: chunk(cert.serialNumber, 2).join("-"),
+
+      device_id: deviceID,
+      status: newStatus
     }
   })
   try {
@@ -44,4 +47,16 @@ export const handler = async (event: any) => {
   } catch (err) {
     console.log("error while sending SQS messgae", err)
   }
+}
+
+function chunk (str: string, n: number) {
+  const ret = []
+  let i
+  let len
+
+  for (i = 0, len = str.length; i < len; i += n) {
+    ret.push(str.substr(i, n))
+  }
+
+  return ret
 }
