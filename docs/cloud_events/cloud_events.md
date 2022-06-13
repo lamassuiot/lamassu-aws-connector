@@ -113,7 +113,7 @@
             "certificates":[
                 {
                     "status":"ACTIVE",
-                    "arn":"arn:aws:iot:eu-west-1:345876576284:cert/3d5621f7822da199cfa20dfb89f36e7d4d7cba915a61952202fb57428dd0a48c",
+                    "arn":"arn:aws:iot:eu-west-1:************:cert/3d5621f7822da199cfa20dfb89f36e7d4d7cba915a61952202fb57428dd0a48c",
                     "id":"3d5621f7822da199cfa20dfb89f36e7d4d7cba915a61952202fb57428dd0a48c",
                     "update_date":"2022-03-31T11:58:28.405Z"
                 }
@@ -126,7 +126,7 @@
             "certificates":[
                 {
                     "status":"REVOKED",
-                    "arn":"arn:aws:iot:eu-west-1:345876576284:cert/b749a584b26e74662ea529bb58caadec96e822e6d436a7237a0ff5805e971563",
+                    "arn":"arn:aws:iot:eu-west-1::************::cert/b749a584b26e74662ea529bb58caadec96e822e6d436a7237a0ff5805e971563",
                     "id":"b749a584b26e74662ea529bb58caadec96e822e6d436a7237a0ff5805e971563",
                     "update_date":"2022-03-29T16:37:18.527Z"
                 }

@@ -13,7 +13,6 @@ export class LamassuCdkStack extends cdk.Stack {
       queueName: "lamassuResponse"
     })
 
-
     const lamassuEventBridgeInfra = new LamassuEventBridge(this, "MonitorInfra", {
       outboundSQSQueue: responseQueue
     })

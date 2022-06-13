@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lamassuiot/aws-connector/pkg/server/discovery"
+	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/discovery"
 	uuid "github.com/satori/go.uuid"
 
 	"github.com/go-kit/kit/log"

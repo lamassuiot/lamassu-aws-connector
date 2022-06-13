@@ -12,8 +12,8 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lamassuiot/aws-connector/pkg/server/api/endpoint"
-	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
+	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/endpoint"
+	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/service"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 

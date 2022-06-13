@@ -1,4 +1,4 @@
-module github.com/lamassuiot/aws-connector
+module github.com/lamassuiot/lamassu-aws-connector
 
 go 1.18
 
