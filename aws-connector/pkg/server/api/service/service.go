@@ -11,56 +11,55 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"strings"
 	"time"
 
-	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/iot"
+	awsIot "github.com/aws/aws-sdk-go/service/iot"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	lamassuErrors "github.com/lamassuiot/aws-connector/pkg/server/api/errors"
 	"github.com/lamassuiot/aws-connector/pkg/server/store"
-	lamassucaclient "github.com/lamassuiot/lamassu-ca/pkg/client"
-
-	"github.com/opentracing/opentracing-go"
+	"github.com/lamassuiot/aws-connector/pkg/server/utils"
+	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"golang.org/x/exp/slices"
 )
 
 type Service interface {
-	Health(ctx context.Context) bool
-
-	//Requests sent to AWS via SQS
-	DispatchAttachIoTCorePolicy(ctx context.Context, caName string, SerialNumber string, Policy string) error
-	DispatchRegistrationCodeRequest(ctx context.Context, CaCert string, caName string, SerialNumber string) error
-	DispatchGetConfiguration(ctx context.Context) error
-	DispatchGetThingConfiguration(ctx context.Context, deviceID string) error
-	DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error
-	DispatchUpdateCertStatusRequest(ctx context.Context, caName string, certSerialNumber string, status string, deviceCert string, caCert string) error
-
 	//Responses received from AWS via SQS
-	HandleSignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error
 	HandleUpdateConfiguration(ctx context.Context, config interface{}) error
 	HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error
 	HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error
 	HandleUpdateCAStatus(ctx context.Context, caName string, caSerialNumber string, caID string, status string) error
 
 	// HTTP methods
-	GetConfiguration(ctx context.Context) (map[string]interface{}, error)
+	Health(ctx context.Context) bool
+	GetConfiguration(ctx context.Context) (interface{}, error)
 	GetThingConfiguration(ctx context.Context, deviceID string) (AWSThing, error)
+	SignRegistrationCode(ctx context.Context, caName string, caCert string, SerialNumber string) error
+	AttachIoTCorePolicy(ctx context.Context, caName string, SerialNumber string, Policy string) error
+	UpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error
+	UpdateCertStatusRequest(ctx context.Context, caName string, certSerialNumber string, status string, deviceCert string, caCert string) error
 }
 
 type awsService struct {
 	ID              string
 	logger          log.Logger
 	LamassuCaClient lamassucaclient.LamassuCaClient
-	SqsQueueName    string
 	db              store.DB
+	awsIotSvc       *awsIot.IoT
+	accountID       string
 }
 
-func NewAwsConnectorService(logger log.Logger, connectorId string, lamassuCAClient lamassucaclient.LamassuCaClient, sqsQueueName string, db store.DB) (s Service) {
+func NewAwsConnectorService(logger log.Logger, connectorId string, lamassuCAClient lamassucaclient.LamassuCaClient, db store.DB, awsIotSvc *awsIot.IoT, awsAccountID string) (s Service) {
 	return &awsService{
 		logger:          logger,
 		LamassuCaClient: lamassuCAClient,
-		SqsQueueName:    sqsQueueName,
 		ID:              connectorId,
 		db:              db,
+		awsIotSvc:       awsIotSvc,
+		accountID:       awsAccountID,
 	}
 }
 
@@ -68,26 +67,75 @@ func (s *awsService) Health(ctx context.Context) bool {
 	return true
 }
 
-func (s *awsService) DispatchAttachIoTCorePolicy(ctx context.Context, caName string, SerialNumber string, Policy string) error {
+func (s *awsService) AttachIoTCorePolicy(ctx context.Context, caName string, SerialNumber string, Policy string) error {
+	listCAsResponse, err := s.awsIotSvc.ListCACertificates(&awsIot.ListCACertificatesInput{
+		PageSize: aws.Int64(25),
+	})
 
-	attachPolicyContent := struct {
-		CaName       string `json:"ca_name"`
-		SerialNumber string `json:"serial_number"`
-		Policy       string `json:"policy"`
-	}{
-		CaName:       caName,
-		SerialNumber: SerialNumber,
-		Policy:       Policy,
-	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.ca.policy.attach")
-	event.SetData(cloudevents.ApplicationJSON, attachPolicyContent)
-
-	// Sending message to SQS
-	err := SendSQSMessage(s, event)
 	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
+		level.Error(s.logger).Log("err", err, "msg", "Failed to list CA certificates")
 		return err
+	}
+
+	for _, ca := range listCAsResponse.Certificates {
+		tagsResponse, err := s.awsIotSvc.ListTagsForResource(&awsIot.ListTagsForResourceInput{
+			ResourceArn: ca.CertificateArn,
+		})
+
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to list tags for CA certificate")
+			return err
+		}
+
+		nameTagIdx := slices.IndexFunc(tagsResponse.Tags, func(tag *awsIot.Tag) bool {
+			return *tag.Key == "lamassuCAName"
+		})
+
+		if nameTagIdx == -1 {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to find lamassuCAName field tag for CA [AWS ID]="+*ca.CertificateId)
+			continue
+		}
+
+		nameTag := tagsResponse.Tags[nameTagIdx]
+		if *nameTag.Value == caName {
+			now := time.Now()
+			policyName := "lamassu-iot-policy_" + caName + "_" + now.Format("2006-01-02_15-04-05")
+			templateBody := fmt.Sprintf(
+				`{"Parameters":{"AWS::IoT::Certificate::CommonName":{"Type":"String"},"AWS::IoT::Certificate::Country":{"Type":"String"},"AWS::IoT::Certificate::Id":{"Type":"String"},"AWS::IoT::Certificate::SerialNumber":{"Type":"String"}},"Resources":{"thing":{"Type":"AWS::IoT::Thing","Properties":{"ThingName":{"Ref":"AWS::IoT::Certificate::CommonName"},"ThingGroups":["LAMASSU"],"AttributePayload":{}}},"certificate":{"Type":"AWS::IoT::Certificate","Properties":{"CertificateId":{"Ref":"AWS::IoT::Certificate::Id"},"Status":"ACTIVE"}},"policy":{"Type":"AWS::IoT::Policy","Properties":{"PolicyName":"%s"}}}}`,
+				policyName)
+
+			_, err = s.awsIotSvc.CreatePolicy(&awsIot.CreatePolicyInput{
+				PolicyDocument: aws.String(Policy),
+				PolicyName:     aws.String(policyName),
+				Tags: []*awsIot.Tag{
+					{
+						Key:   aws.String("serialNumber"),
+						Value: aws.String(SerialNumber),
+					},
+				},
+			})
+
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to create policy")
+				return err
+			}
+
+			_, err = s.awsIotSvc.UpdateCACertificate(&awsIot.UpdateCACertificateInput{
+				CertificateId:             ca.CertificateId,
+				NewAutoRegistrationStatus: aws.String("ENABLE"),
+				NewStatus:                 aws.String("ACTIVE"),
+				RegistrationConfig: &awsIot.RegistrationConfig{
+					RoleArn:      aws.String("arn:aws:iam::" + s.accountID + ":role/JITPRole"),
+					TemplateBody: aws.String(templateBody),
+				},
+				RemoveAutoRegistration: aws.Bool(false),
+			})
+
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to update CA certificate")
+				return err
+			}
+		}
 	}
 
 	s.db.DeleteAWSIoTCoreConfig(ctx)
@@ -95,231 +143,15 @@ func (s *awsService) DispatchAttachIoTCorePolicy(ctx context.Context, caName str
 	return err
 }
 
-func (s *awsService) DispatchRegistrationCodeRequest(ctx context.Context, CaCert string, caName string, SerialNumber string) error {
-	initializeCARegistration := struct {
-		CaCert       string `json:"ca_cert"`
-		CaName       string `json:"ca_name"`
-		SerialNumber string `json:"serial_number"`
-	}{
-		CaName:       caName,
-		CaCert:       CaCert,
-		SerialNumber: SerialNumber,
-	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.ca.registration.request-code")
-	event.SetData(cloudevents.ApplicationJSON, initializeCARegistration)
-
-	// Sending message to SQS
-	err := SendSQSMessage(s, event)
+func (s *awsService) SignRegistrationCode(ctx context.Context, caName string, caCert string, SerialNumber string) error {
+	registrationCode, err := s.awsIotSvc.GetRegistrationCode(&awsIot.GetRegistrationCodeInput{})
 	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-		return err
-	}
-	return nil
-}
-
-func (s *awsService) DispatchUpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error {
-	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
-	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
-	if status == "REVOKED" {
-		status = "INACTIVE"
-	}
-	updateStatus := struct {
-		CertificateID string `json:"certificate_id"`
-		Status        string `json:"status"`
-	}{
-		CertificateID: certificateID,
-		Status:        status,
-	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.ca.status.update")
-	event.SetData(cloudevents.ApplicationJSON, updateStatus)
-
-	// Sending message to SQS
-	err := SendSQSMessage(s, event)
-	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-		return err
-	}
-	err = s.db.DeleteAWSIoTCoreConfig(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *awsService) DispatchUpdateCertStatusRequest(ctx context.Context, deviceID string, certSerialNumber string, status string, deviceCert string, caCert string) error {
-	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
-	_, ctx = opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
-	updateStatus := CertUpdateStatus{
-		SerialNumber: certSerialNumber,
-		DeviceID:     deviceID,
-		Status:       status,
-		DeviceCert:   deviceCert,
-		CaCert:       caCert,
-	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.cert.status.update")
-	event.SetData(cloudevents.ApplicationJSON, updateStatus)
-
-	// Sending message to SQS
-	err := SendSQSMessage(s, event)
-	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
+		level.Error(s.logger).Log("err", err, "msg", "Failed to get registration code")
 		return err
 	}
 
-	s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
-	return nil
-}
-func (s *awsService) DispatchGetConfiguration(ctx context.Context) error {
-	emptyData := struct{}{}
-
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.config.request")
-	event.SetData(cloudevents.ApplicationJSON, emptyData)
-
-	err := SendSQSMessage(s, event)
-	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-		return err
-	}
-
-	return nil
-}
-
-func (s *awsService) DispatchGetThingConfiguration(ctx context.Context, deviceID string) error {
-	getConfig := struct {
-		DeviceID string `json:"device_id"`
-	}{
-		DeviceID: deviceID,
-	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.thing.config.request")
-	event.SetData(cloudevents.ApplicationJSON, getConfig)
-
-	err := SendSQSMessage(s, event)
-	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
-		return err
-	}
-
-	return nil
-}
-
-func (s *awsService) GetConfiguration(ctx context.Context) (map[string]interface{}, error) {
-	var stop bool
-	getConfigurationWithRetry := func(ctx context.Context) map[string]interface{} {
-		var config map[string]interface{}
-		var err error
-		for {
-			if stop {
-				break
-			}
-			config, err = s.db.GetAWSIoTCoreConfig(ctx)
-			// fmt.Print(err)
-			if err == nil {
-				// s.db.DeleteAWSIoTCoreConfig(ctx)
-				return config
-			}
-
-			time.Sleep(1 * time.Second)
-		}
-		return config
-	}
-
-	if _, err := s.db.GetAWSIoTCoreConfig(ctx); err != nil {
-		s.DispatchGetConfiguration(ctx)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
-
-	config := make(chan map[string]interface{}, 1)
-	go func() {
-		config <- getConfigurationWithRetry(ctx)
-	}()
-	select {
-	case conf := <-config:
-		return conf, nil
-	case <-ctx.Done():
-		stop = true
-		return make(map[string]interface{}), &lamassuErrors.GenericError{
-			StatusCode: 404,
-			Message:    "timeout while geting config from AWS",
-		}
-	}
-}
-
-func (s *awsService) GetThingConfiguration(ctx context.Context, deviceID string) (AWSThing, error) {
-	var stop bool
-	getConfigurationWithRetry := func(ctx context.Context) interface{} {
-		var config interface{}
-		var err error
-		for {
-			if stop {
-				break
-			}
-			config, err = s.db.GetAWSIoTCoreThingConfig(ctx, deviceID)
-			if err == nil {
-				return config
-			}
-
-			time.Sleep(1 * time.Second)
-		}
-		return config
-	}
-
-	if _, err := s.db.GetAWSIoTCoreThingConfig(ctx, deviceID); err != nil {
-		s.DispatchGetThingConfiguration(ctx, deviceID)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	defer cancel()
-
-	config := make(chan interface{}, 1)
-	go func() {
-		config <- getConfigurationWithRetry(ctx)
-	}()
-	select {
-	case conf := <-config:
-		var thing AWSThing
-		confBytes, err := json.Marshal(conf)
-		if err != nil {
-			s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
-			return AWSThing{}, err
-		}
-		json.Unmarshal(confBytes, &thing)
-		return thing, nil
-	case <-ctx.Done():
-		stop = true
-		return AWSThing{}, &lamassuErrors.GenericError{
-			StatusCode: 404,
-			Message:    "timeout while geting device config from AWS",
-		}
-	}
-}
-
-func (s *awsService) HandleUpdateCAStatus(ctx context.Context, caName string, caSerialNumber string, caID string, status string) error {
-	level.Info(s.logger).Log("msg", "invalidating config cache due to CA update. caName:"+caName+" caSerialNumber:"+caSerialNumber+" caID:"+caID+" status:"+status)
-	s.db.DeleteAWSIoTCoreConfig(ctx)
-	return nil
-}
-
-func (s *awsService) HandleUpdateConfiguration(ctx context.Context, config interface{}) error {
-	s.db.UpdateAWSIoTCoreConfig(ctx, config)
-	return nil
-}
-
-func (s *awsService) HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error {
-	s.db.UpdateAWSIoTCoreThingConfig(ctx, deviceID, config)
-	return nil
-}
-
-func (s *awsService) HandleSignRegistrationCode(ctx context.Context, RegistrationCode string, caName string, CaCert string, SerialNumber string) error {
-	// Generate CSR template for CA verification certificate
 	subj := pkix.Name{
-		CommonName: RegistrationCode,
+		CommonName: *registrationCode.RegistrationCode,
 	}
 	rawSubj := subj.ToRDNSequence()
 	asn1Subj, _ := asn1.Marshal(rawSubj)
@@ -343,39 +175,33 @@ func (s *awsService) HandleSignRegistrationCode(ctx context.Context, Registratio
 		return err
 	}
 
-	ctx = context.Background()
-	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
-	sapn, ctx := opentracing.StartSpanFromContext(ctx, "SignCertificateRequest")
-	fmt.Println(sapn)
-
 	// Sign verification certificate CSR
-	crt, err := s.LamassuCaClient.SignCertificateRequest(ctx, caName, csr, "pki", false)
+	crt, _, err := s.LamassuCaClient.SignCertificateRequest(ctx, caDTO.Pki, caName, csr, false, csr.Subject.CommonName)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "Failed to sign registration code.")
 		return err
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})
-
-	finializeCARegistrationProcessContent := struct {
-		CaCert           string `json:"ca_cert"`
-		CaName           string `json:"ca_name"`
-		SerialNumber     string `json:"serial_number"`
-		VerificationCert string `json:"verification_cert"`
-	}{
-		CaName:           caName,
-		SerialNumber:     SerialNumber,
-		CaCert:           CaCert,
-		VerificationCert: base64.StdEncoding.EncodeToString(certPEM),
+	data, _ := base64.StdEncoding.DecodeString(caCert)
+	caCert = string(data)
+	serialN := &awsIot.Tag{
+		Key:   aws.String("serialNumber"),
+		Value: aws.String(SerialNumber),
 	}
-	event := cloudevents.NewEvent()
-	event.SetType("io.lamassu.iotcore.ca.registration.signed-code")
-	event.SetData(cloudevents.ApplicationJSON, finializeCARegistrationProcessContent)
+	caname := &awsIot.Tag{
+		Key:   aws.String("lamassuCAName"),
+		Value: aws.String(caName),
+	}
+	tags := []*awsIot.Tag{serialN, caname}
+	_, err = s.awsIotSvc.RegisterCACertificate(&awsIot.RegisterCACertificateInput{
+		CaCertificate:           aws.String(caCert),
+		VerificationCertificate: aws.String(string(certPEM)),
+		Tags:                    tags,
+	})
 
-	// Sending message to SQS
-	err = SendSQSMessage(s, event)
 	if err != nil {
-		level.Error(s.logger).Log("err", err, "msg", "Failed to send message to AWS SQS")
+		level.Error(s.logger).Log("err", err, "msg", "Failed to register CA certificate")
 		return err
 	}
 
@@ -383,10 +209,318 @@ func (s *awsService) HandleSignRegistrationCode(ctx context.Context, Registratio
 
 	return nil
 }
-func (s *awsService) HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error {
-	ctx = context.WithValue(ctx, "LamassuLogger", s.logger)
+
+func (s *awsService) UpdateCAStatusRequest(ctx context.Context, caName string, status string, certificateID string) error {
 	if status == "REVOKED" {
-		err := s.LamassuCaClient.RevokeCert(ctx, caName, serialNumber, "pki")
+		status = "INACTIVE"
+	}
+
+	_, err := s.awsIotSvc.UpdateCACertificate(&awsIot.UpdateCACertificateInput{
+		CertificateId: aws.String(certificateID),
+		NewStatus:     aws.String(status),
+	})
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Failed to Update CA certificate status")
+		return err
+	}
+
+	err = s.db.DeleteAWSIoTCoreConfig(ctx)
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Failed to delete AWS IOT Core config")
+		return err
+	}
+
+	return nil
+}
+
+func (s *awsService) UpdateCertStatusRequest(ctx context.Context, deviceID string, certSerialNumber string, status string, deviceCert string, caCert string) error {
+	searchResult, err := s.awsIotSvc.SearchIndex(&awsIot.SearchIndexInput{QueryString: aws.String("thingName:" + deviceID)})
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Failed to search device in IoT Core")
+		return err
+	}
+
+	if len(searchResult.Things) == 1 {
+		thingsPrincipalResponse, err := s.awsIotSvc.ListThingPrincipals(&awsIot.ListThingPrincipalsInput{
+			MaxResults: aws.Int64(int64(25)),
+			ThingName:  aws.String(deviceID),
+		})
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to list things principals")
+			return err
+		}
+		updatedThingCertifcate := false
+		for _, principal := range thingsPrincipalResponse.Principals {
+			splitiedPrincipal := strings.Split(*principal, ":")
+			certificateID := strings.Replace(splitiedPrincipal[len(splitiedPrincipal)-1], "cert/", "", 1)
+			describeCertificateResponse, err := s.awsIotSvc.DescribeCertificate(&awsIot.DescribeCertificateInput{
+				CertificateId: aws.String(certificateID),
+			})
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to describe things certificate")
+				return err
+			}
+
+			block, _ := pem.Decode([]byte(*describeCertificateResponse.CertificateDescription.CertificatePem))
+			crt, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to decode crt")
+				return err
+			}
+
+			if utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2) == certSerialNumber {
+				_, err = s.awsIotSvc.UpdateCertificate(&awsIot.UpdateCertificateInput{
+					CertificateId: aws.String(certificateID),
+					NewStatus:     aws.String(status),
+				})
+				if err != nil {
+					level.Error(s.logger).Log("err", err, "msg", "Failed to Update certificate status")
+					return err
+				}
+
+				updatedThingCertifcate = true
+			}
+		}
+		if !updatedThingCertifcate {
+			level.Debug(s.logger).Log("msg", "The device does not have the certificate yet. Registering manually")
+		}
+	} else if len(searchResult.Things) > 1 {
+		level.Error(s.logger).Log("msg", "Inconsistent thing repo: More than one result for [DeviceID]="+deviceID)
+	} else {
+		level.Debug(s.logger).Log("msg", "No results with device ID")
+
+		_, err = s.awsIotSvc.CreateThing(&awsIot.CreateThingInput{
+			ThingName: aws.String(deviceID),
+		})
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to register device in IoT Core")
+			return err
+		}
+
+		registerCertificateResponse, err := s.awsIotSvc.RegisterCertificate(&awsIot.RegisterCertificateInput{
+			CaCertificatePem: &caCert,
+			CertificatePem:   &deviceCert,
+			Status:           &status,
+		})
+
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to register certificate in IoT Core")
+			return err
+		}
+
+		s.awsIotSvc.AttachThingPrincipal(&awsIot.AttachThingPrincipalInput{
+			Principal: registerCertificateResponse.CertificateArn,
+			ThingName: aws.String(deviceID),
+		})
+	}
+
+	s.db.DeleteAWSIoTCoreThingConfig(ctx, deviceID)
+	return nil
+}
+
+func (s *awsService) GetConfiguration(ctx context.Context) (interface{}, error) {
+	endpointAddress := ""
+	endpointInfo, err := s.awsIotSvc.DescribeEndpoint(&iot.DescribeEndpointInput{EndpointType: aws.String("iot:Data")})
+	if err == nil {
+		endpointAddress = *endpointInfo.EndpointAddress
+	}
+
+	awsCAs := make([]interface{}, 0)
+	listCAsResponse, err := s.awsIotSvc.ListCACertificates(&awsIot.ListCACertificatesInput{AscendingOrder: aws.Bool(true), PageSize: aws.Int64(int64(30))})
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Failed to search device in IoT Core")
+		return make(map[string]interface{}), err
+	}
+
+	for _, ca := range listCAsResponse.Certificates {
+		tagsResponse, err := s.awsIotSvc.ListTagsForResource(&awsIot.ListTagsForResourceInput{
+			ResourceArn: ca.CertificateArn,
+		})
+
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to list tags")
+			continue
+		}
+
+		nameTagIdx := slices.IndexFunc(tagsResponse.Tags, func(tag *awsIot.Tag) bool {
+			return *tag.Key == "lamassuCAName"
+		})
+
+		if nameTagIdx == -1 {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to find lamassuCAName field tag for CA [AWS ID]="+*ca.CertificateId)
+			continue
+		}
+
+		nameTag := tagsResponse.Tags[nameTagIdx]
+		caDescription, err := s.awsIotSvc.DescribeCACertificate(&awsIot.DescribeCACertificateInput{
+			CertificateId: ca.CertificateId,
+		})
+
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to describe CA certificate")
+			continue
+		}
+
+		type awsCAConfig struct {
+			Name           string    `json:"name"`
+			ARN            string    `json:"arn"`
+			ID             string    `json:"id"`
+			Status         string    `json:"status"`
+			CreationDate   time.Time `json:"creation_date"`
+			PolicyStatus   string    `json:"policy_status"`
+			PolicyName     string    `json:"policy_name,omitempty"`
+			PolicyDocument string    `json:"policy_document,omitempty"`
+		}
+
+		if caDescription.RegistrationConfig != nil {
+			caTemplate := *caDescription.RegistrationConfig.TemplateBody
+			type parsedCaTemplateType struct {
+				Resources struct {
+					Policy struct {
+						Properties struct {
+							PolicyName string `json:"PolicyName"`
+						} `json:"Properties"`
+					} `json:"policy"`
+				} `json:"Resources"`
+			}
+			var parsedCaTemplate parsedCaTemplateType
+			json.Unmarshal([]byte(caTemplate), &parsedCaTemplate)
+			policyName := parsedCaTemplate.Resources.Policy.Properties.PolicyName
+			policyResponse, err := s.awsIotSvc.GetPolicy(&awsIot.GetPolicyInput{PolicyName: &policyName})
+
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to get policy response")
+				caConfig := awsCAConfig{
+					Name:         *nameTag.Value,
+					ARN:          *ca.CertificateArn,
+					ID:           *ca.CertificateId,
+					Status:       *ca.Status,
+					CreationDate: *ca.CreationDate,
+					PolicyName:   policyName,
+					PolicyStatus: "Inconsistent",
+				}
+				awsCAs = append(awsCAs, caConfig)
+			} else {
+				caConfig := awsCAConfig{
+					Name:           *nameTag.Value,
+					ARN:            *ca.CertificateArn,
+					ID:             *ca.CertificateId,
+					Status:         *ca.Status,
+					CreationDate:   *ca.CreationDate,
+					PolicyName:     policyName,
+					PolicyDocument: *policyResponse.PolicyDocument,
+					PolicyStatus:   "Active",
+				}
+				awsCAs = append(awsCAs, caConfig)
+			}
+		} else {
+			caConfig := awsCAConfig{
+				Name:         *nameTag.Value,
+				ARN:          *ca.CertificateArn,
+				ID:           *ca.CertificateId,
+				Status:       *ca.Status,
+				CreationDate: *ca.CreationDate,
+				PolicyStatus: "NoPolicy",
+			}
+			awsCAs = append(awsCAs, caConfig)
+		}
+
+	}
+
+	type awsConfig struct {
+		AwsAccountID    string        `json:"account_id"`
+		IotCoreEndpoint string        `json:"iot_core_endpoint"`
+		RegisteredCAs   []interface{} `json:"registered_cas"`
+	}
+	return &awsConfig{
+		AwsAccountID:    s.accountID,
+		IotCoreEndpoint: endpointAddress,
+		RegisteredCAs:   awsCAs,
+	}, nil
+
+}
+
+func (s *awsService) GetThingConfiguration(ctx context.Context, deviceID string) (AWSThing, error) {
+	searchResult, err := s.awsIotSvc.SearchIndex(&awsIot.SearchIndexInput{QueryString: aws.String("thingName:" + deviceID)})
+	if err != nil {
+		level.Error(s.logger).Log("err", err, "msg", "Failed to search device in IoT Core")
+		return AWSThing{}, err
+	}
+	if len(searchResult.Things) == 1 {
+		thingResult := searchResult.Things[0]
+		var thing AWSThing
+		thing.DeviceID = deviceID
+		thing.Status = 200
+		thing.Config.AWSThingID = *thingResult.ThingId
+		thing.Config.Certificates = []AWSThingCertificate{}
+
+		fmt.Println(*thingResult.Connectivity.Connected)
+		if *thingResult.Connectivity.Connected {
+			thing.Config.LastConnection = int(*thingResult.Connectivity.Timestamp)
+		}
+
+		principalResponse, err := s.awsIotSvc.ListThingPrincipals(&awsIot.ListThingPrincipalsInput{
+			ThingName:  thingResult.ThingName,
+			MaxResults: aws.Int64(int64(25)),
+		})
+
+		if err != nil {
+			level.Error(s.logger).Log("err", err, "msg", "Failed to list thing principals")
+			return thing, nil
+		}
+
+		for _, principal := range principalResponse.Principals {
+			splitiedPrincipal := strings.Split(*principal, ":")
+			certificateID := strings.Replace(splitiedPrincipal[len(splitiedPrincipal)-1], "cert/", "", 1)
+			certificateResponse, err := s.awsIotSvc.DescribeCertificate(&awsIot.DescribeCertificateInput{CertificateId: &certificateID})
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to describe thing cetificate")
+				return thing, nil
+			}
+
+			block, _ := pem.Decode([]byte(*certificateResponse.CertificateDescription.CertificatePem))
+
+			crt, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				level.Error(s.logger).Log("err", err, "msg", "Failed to decode crt")
+				return thing, nil
+			}
+
+			thingCrt := AWSThingCertificate{
+				ARN:          *certificateResponse.CertificateDescription.CertificateArn,
+				ID:           *certificateResponse.CertificateDescription.CertificateId,
+				SerialNumber: utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2),
+				Status:       *certificateResponse.CertificateDescription.Status,
+				UpdateDate:   *certificateResponse.CertificateDescription.LastModifiedDate,
+				CaName:       crt.Issuer.CommonName,
+			}
+			thing.Config.Certificates = append(thing.Config.Certificates, thingCrt)
+		}
+
+		return thing, nil
+	}
+	return AWSThing{}, nil
+}
+
+func (s *awsService) HandleUpdateCAStatus(ctx context.Context, caName string, caSerialNumber string, caID string, status string) error {
+	level.Info(s.logger).Log("msg", "invalidating config cache due to CA update. caName:"+caName+" caSerialNumber:"+caSerialNumber+" caID:"+caID+" status:"+status)
+	s.db.DeleteAWSIoTCoreConfig(ctx)
+	return nil
+}
+
+func (s *awsService) HandleUpdateConfiguration(ctx context.Context, config interface{}) error {
+	s.db.UpdateAWSIoTCoreConfig(ctx, config)
+	return nil
+}
+
+func (s *awsService) HandleUpdateThingConfiguration(ctx context.Context, deviceID string, config interface{}) error {
+	s.db.UpdateAWSIoTCoreThingConfig(ctx, deviceID, config)
+	return nil
+}
+
+func (s *awsService) HandleUpdateCertificateStatus(ctx context.Context, caName string, serialNumber string, status string) error {
+	if status == "REVOKED" {
+		err := s.LamassuCaClient.RevokeCert(ctx, caDTO.Pki, caName, serialNumber)
 		if err != nil {
 			switch err.(type) {
 			case *lamassucaclient.AlreadyRevokedError:

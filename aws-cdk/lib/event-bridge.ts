@@ -32,6 +32,7 @@ export class LamassuEventBridge extends cdk.Construct {
 
     const monitorIotCoreCertUpdate = new lambdaNodeJS.NodejsFunction(this, "IotCoreUpdateCertificateStatus", {
       entry: path.join(__dirname, "../resources/lambda-notify-iotcore-update-certificate/index.ts"),
+      functionName: "Lamassu-Notify-IotCoreUpdateCertificateSataus",
       runtime: lambda.Runtime.NODEJS_14_X,
       handler: "handler",
       bundling: {
@@ -67,6 +68,7 @@ export class LamassuEventBridge extends cdk.Construct {
 
     const monitorIotCoreCACertUpdate = new lambdaNodeJS.NodejsFunction(this, "IotCoreUpdatCACertificateStatus", {
       entry: path.join(__dirname, "../resources/lambda-notify-iotcore-update-ca/index.ts"),
+      functionName: "Lamassu-Notify-IotCoreUpdatCACertificateStatus",
       runtime: lambda.Runtime.NODEJS_14_X,
       handler: "handler",
       bundling: {

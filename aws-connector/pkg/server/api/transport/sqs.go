@@ -21,13 +21,13 @@ var (
 	sqsSvc *sqs.SQS
 )
 
-func pollMessages(chn chan<- *sqs.Message, logger log.Logger) {
+func pollMessages(chn chan<- *sqs.Message, logger log.Logger, sqsURL string) {
 
 	level.Info(logger).Log("msg", "Polling messages from SQS")
 
 	for {
 		output, err := sqsSvc.ReceiveMessage(&sqs.ReceiveMessageInput{
-			QueueUrl:            aws.String("https://sqs.eu-west-1.amazonaws.com/345876576284/lamassuResponse"),
+			QueueUrl:            aws.String(sqsURL),
 			MaxNumberOfMessages: aws.Int64(2),
 			WaitTimeSeconds:     aws.Int64(15),
 		})
@@ -52,36 +52,10 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 	fmt.Println(string(jsonM))
 
 	switch event.Type() {
-	case "io.lamassu.iotcore.ca.registration.response-code":
-		var req endpoint.SignRegistrationCodeRequest
-		json.Unmarshal(event.Data(), &req)
-		_, err := e.SignCertificateEndpoint(context.Background(), req)
-		return err
-
-	case "io.lamassu.iotcore.config.response":
-		var req endpoint.UpdateConfigurationRequest
-		var eventData map[string]interface{}
-
-		json.Unmarshal(event.Data(), &eventData)
-
-		req.Config = eventData
-		_, err := e.UpdateConfigurationEndpoint(context.Background(), req)
-		return err
-
-	case "io.lamassu.iotcore.thing.config.response":
-		var req endpoint.UpdateThingConfigurationRequest
-		var eventData service.AWSThing
-
-		json.Unmarshal(event.Data(), &eventData)
-
-		req.Config = eventData
-		req.DeviceID = eventData.DeviceID
-		_, err := e.UpdateThingsConfigurationEndpoint(context.Background(), req)
-		return err
-
 	case "io.lamassu.iotcore.cert.status.update":
 		var eventData endpoint.HandleUpdateCertStatusCodeRequest
 		json.Unmarshal(event.Data(), &eventData)
+		level.Info(logger).Log("msg", eventData)
 		_, err := e.HandleUpdateCertificateStatusEndpoint(context.Background(), eventData)
 		level.Debug(logger).Log("msg", eventData)
 		return err
@@ -101,29 +75,29 @@ func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) er
 	return nil
 }
 
-func deleteMessage(msg *sqs.Message, logger log.Logger) {
+func deleteMessage(msg *sqs.Message, logger log.Logger, sqsURL string) {
 	sqsSvc.DeleteMessage(&sqs.DeleteMessageInput{
-		QueueUrl:      aws.String("https://sqs.eu-west-1.amazonaws.com/345876576284/lamassuResponse"),
+		QueueUrl:      aws.String(sqsURL),
 		ReceiptHandle: msg.ReceiptHandle,
 	})
 	level.Info(logger).Log("msg", "Deleted message from SQS")
 }
 
-func MakeSqsHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) {
+func MakeSqsHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer, awsRegion string, awsAccountID, awsSQSInboundQueueName string) {
 	e := endpoint.MakeServerEndpoints(s, otTracer)
-
+	sqsURL := "https://sqs." + awsRegion + ".amazonaws.com/" + awsAccountID + "/" + awsSQSInboundQueueName
 	go func() {
 		sess := session.Must(session.NewSessionWithOptions(session.Options{Config: aws.Config{Region: aws.String("eu-west-1")}}))
 
 		sqsSvc = sqs.New(sess)
 
 		chnMessages := make(chan *sqs.Message, 2)
-		go pollMessages(chnMessages, logger)
+		go pollMessages(chnMessages, logger, sqsURL)
 
 		for message := range chnMessages {
 			err := handleMessage(message, e, logger)
 			if err == nil {
-				deleteMessage(message, logger)
+				deleteMessage(message, logger, sqsURL)
 			}
 		}
 	}()

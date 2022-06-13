@@ -3,23 +3,29 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
 	"github.com/lamassuiot/aws-connector/pkg/server/api/transport"
 	"github.com/lamassuiot/aws-connector/pkg/server/config"
 	"github.com/lamassuiot/aws-connector/pkg/server/store/db"
 	"github.com/opentracing/opentracing-go"
 
-	"github.com/lamassuiot/aws-connector/pkg/server/discovery/consul"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
-
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	awsIot "github.com/aws/aws-sdk-go/service/iot"
+	awsSts "github.com/aws/aws-sdk-go/service/sts"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	lamassucaclient "github.com/lamassuiot/lamassu-ca/pkg/client"
+	"github.com/lamassuiot/aws-connector/pkg/server/discovery/consul"
+	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
 func main() {
@@ -74,7 +80,18 @@ func main() {
 	}
 	level.Info(logger).Log("msg", "Service liveness information registered to Consul")
 
-	lamassuCAClient, err := lamassucaclient.NewLamassuCaClient(cfg.LamassuCAAddress, cfg.LamassuCACertFile, cfg.LamassuCAClientCertFile, cfg.LamassuCAClientKeyFile, logger)
+	lamassuCAClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.ClientConfiguration{
+		URL: &url.URL{
+			Scheme: "https",
+			Host:   cfg.LamassuCAAddress,
+		},
+		AuthMethod: clientUtils.MutualTLS,
+		AuthMethodConfig: &clientUtils.MutualTLSConfig{
+			ClientCert: cfg.LamassuCAClientCertFile,
+			ClientKey:  cfg.LamassuCAClientKeyFile,
+		},
+		CACertificate: cfg.LamassuCACertFile,
+	})
 	if err != nil {
 		level.Error(logger).Log("err", err, "msg", "Could not create Lamassu CA Client")
 		os.Exit(1)
@@ -86,10 +103,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := service.NewAwsConnectorService(logger, connectorID, lamassuCAClient, cfg.AwsSqsQueueName, dbStore)
-	transport.MakeSqsHandler(svc, logger, tracer)
+	sess := session.Must(session.NewSession(&aws.Config{
+		Region:      aws.String(cfg.AwsDefaultRegion),
+		Credentials: credentials.NewStaticCredentials(cfg.AwsAccessKeyID, cfg.AwsSecretAccessKey, ""),
+	}))
+	awsSts := awsSts.New(sess, aws.NewConfig())
+	awsSvc := awsIot.New(sess, aws.NewConfig())
 
-	//mux := http.NewServeMux()
+	awsIdentity, err := awsSts.GetCallerIdentity(nil)
+	if err != nil {
+		level.Error(logger).Log("err", err, "msg", "Could not get AWS Identity")
+		os.Exit(1)
+	}
+
+	svc := service.NewAwsConnectorService(logger, connectorID, lamassuCAClient, dbStore, awsSvc, *awsIdentity.Account)
+	transport.MakeSqsHandler(svc, logger, tracer, cfg.AwsDefaultRegion, *awsIdentity.Account, cfg.AwsSqsInboundQueueName)
 
 	http.Handle("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc, log.With(logger, "component", "HTTP"), tracer)))
 

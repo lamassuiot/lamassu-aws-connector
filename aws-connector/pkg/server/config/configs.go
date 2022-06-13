@@ -25,7 +25,10 @@ type Config struct {
 	ConsulPort     string `required:"true" split_words:"true"`
 	ConsulCA       string `required:"true" split_words:"true"`
 
-	AwsSqsQueueName string `required:"true" split_words:"true"`
+	AwsAccessKeyID         string `required:"true" split_words:"true"`
+	AwsSecretAccessKey     string `required:"true" split_words:"true"`
+	AwsDefaultRegion       string `required:"true" split_words:"true"`
+	AwsSqsInboundQueueName string `required:"true" split_words:"true"`
 
 	LamassuCACertFile       string `required:"true" split_words:"true"`
 	LamassuCAClientCertFile string `required:"true" split_words:"true"`

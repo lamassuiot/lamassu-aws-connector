@@ -1,7 +1,8 @@
-# github.com/armon/go-metrics v0.3.9
+# github.com/armon/go-metrics v0.3.10
+## explicit; go 1.12
 github.com/armon/go-metrics
-# github.com/aws/aws-sdk-go v1.42.35
-## explicit
+# github.com/aws/aws-sdk-go v1.44.30
+## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/awserr
 github.com/aws/aws-sdk-go/aws/awsutil
@@ -38,17 +39,20 @@ github.com/aws/aws-sdk-go/private/protocol/query/queryutil
 github.com/aws/aws-sdk-go/private/protocol/rest
 github.com/aws/aws-sdk-go/private/protocol/restjson
 github.com/aws/aws-sdk-go/private/protocol/xml/xmlutil
+github.com/aws/aws-sdk-go/service/iot
 github.com/aws/aws-sdk-go/service/sqs
 github.com/aws/aws-sdk-go/service/sso
 github.com/aws/aws-sdk-go/service/sso/ssoiface
 github.com/aws/aws-sdk-go/service/sts
 github.com/aws/aws-sdk-go/service/sts/stsiface
 # github.com/cespare/xxhash v1.1.0
+## explicit
 github.com/cespare/xxhash
 # github.com/cespare/xxhash/v2 v2.1.2
+## explicit; go 1.11
 github.com/cespare/xxhash/v2
 # github.com/cloudevents/sdk-go/v2 v2.6.0
-## explicit
+## explicit; go 1.14
 github.com/cloudevents/sdk-go/v2
 github.com/cloudevents/sdk-go/v2/binding
 github.com/cloudevents/sdk-go/v2/binding/format
@@ -64,7 +68,7 @@ github.com/cloudevents/sdk-go/v2/protocol
 github.com/cloudevents/sdk-go/v2/protocol/http
 github.com/cloudevents/sdk-go/v2/types
 # github.com/dgraph-io/badger/v3 v3.2103.2
-## explicit
+## explicit; go 1.12
 github.com/dgraph-io/badger/v3
 github.com/dgraph-io/badger/v3/fb
 github.com/dgraph-io/badger/v3/options
@@ -74,15 +78,18 @@ github.com/dgraph-io/badger/v3/table
 github.com/dgraph-io/badger/v3/trie
 github.com/dgraph-io/badger/v3/y
 # github.com/dgraph-io/ristretto v0.1.0
+## explicit; go 1.12
 github.com/dgraph-io/ristretto
 github.com/dgraph-io/ristretto/z
 github.com/dgraph-io/ristretto/z/simd
 # github.com/dustin/go-humanize v1.0.0
+## explicit
 github.com/dustin/go-humanize
-# github.com/fatih/color v1.12.0
+# github.com/fatih/color v1.13.0
+## explicit; go 1.13
 github.com/fatih/color
 # github.com/go-kit/kit v0.12.0
-## explicit
+## explicit; go 1.17
 github.com/go-kit/kit/endpoint
 github.com/go-kit/kit/log
 github.com/go-kit/kit/log/level
@@ -95,78 +102,107 @@ github.com/go-kit/kit/transport
 github.com/go-kit/kit/transport/http
 github.com/go-kit/kit/util/conn
 # github.com/go-kit/log v0.2.0
-## explicit
+## explicit; go 1.17
 github.com/go-kit/log
 github.com/go-kit/log/level
 # github.com/go-logfmt/logfmt v0.5.1
+## explicit; go 1.17
 github.com/go-logfmt/logfmt
 # github.com/gogo/protobuf v1.3.2
+## explicit; go 1.15
 github.com/gogo/protobuf/proto
 # github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
+## explicit
 github.com/golang/glog
 # github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
+## explicit
 github.com/golang/groupcache/lru
 # github.com/golang/protobuf v1.5.2
+## explicit; go 1.9
 github.com/golang/protobuf/proto
-# github.com/golang/snappy v0.0.3
+# github.com/golang/snappy v0.0.4
+## explicit
 github.com/golang/snappy
-# github.com/google/flatbuffers v1.12.1
+# github.com/google/flatbuffers v2.0.0+incompatible
+## explicit
 github.com/google/flatbuffers/go
-# github.com/google/uuid v1.1.2
+# github.com/google/uuid v1.3.0
+## explicit
 github.com/google/uuid
 # github.com/gorilla/mux v1.8.0
-## explicit
+## explicit; go 1.12
 github.com/gorilla/mux
-# github.com/hashicorp/consul/api v1.10.1
-## explicit
+# github.com/hashicorp/consul/api v1.12.0
+## explicit; go 1.12
 github.com/hashicorp/consul/api
 # github.com/hashicorp/go-cleanhttp v0.5.2
+## explicit; go 1.13
 github.com/hashicorp/go-cleanhttp
-# github.com/hashicorp/go-hclog v0.16.2
+# github.com/hashicorp/go-hclog v1.1.0
+## explicit; go 1.13
 github.com/hashicorp/go-hclog
 # github.com/hashicorp/go-immutable-radix v1.3.1
+## explicit
 github.com/hashicorp/go-immutable-radix
 # github.com/hashicorp/go-rootcerts v1.0.2
+## explicit; go 1.12
 github.com/hashicorp/go-rootcerts
 # github.com/hashicorp/golang-lru v0.5.4
+## explicit; go 1.12
 github.com/hashicorp/golang-lru/simplelru
-# github.com/hashicorp/serf v0.9.5
+# github.com/hashicorp/serf v0.9.6
+## explicit; go 1.12
 github.com/hashicorp/serf/coordinate
 # github.com/jmespath/go-jmespath v0.4.0
+## explicit; go 1.14
 github.com/jmespath/go-jmespath
 # github.com/json-iterator/go v1.1.12
+## explicit; go 1.12
 github.com/json-iterator/go
 # github.com/kelseyhightower/envconfig v1.4.0
 ## explicit
 github.com/kelseyhightower/envconfig
 # github.com/klauspost/compress v1.13.6
+## explicit; go 1.15
 github.com/klauspost/compress
 github.com/klauspost/compress/fse
 github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/lamassuiot/lamassu-ca v1.0.21
-## explicit
-github.com/lamassuiot/lamassu-ca/pkg/client
-# github.com/mattn/go-colorable v0.1.8
+# github.com/lamassuiot/lamassuiot v0.0.1
+## explicit; go 1.18
+github.com/lamassuiot/lamassuiot/pkg/ca/client
+github.com/lamassuiot/lamassuiot/pkg/ca/common/dto
+github.com/lamassuiot/lamassuiot/pkg/utils/client
+github.com/lamassuiot/lamassuiot/pkg/utils/client/filters
+github.com/lamassuiot/lamassuiot/pkg/utils/server/filters
+github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types
+# github.com/mattn/go-colorable v0.1.12
+## explicit; go 1.13
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.14
+## explicit; go 1.12
 github.com/mattn/go-isatty
 # github.com/mitchellh/go-homedir v1.1.0
+## explicit
 github.com/mitchellh/go-homedir
-# github.com/mitchellh/mapstructure v1.4.2
+# github.com/mitchellh/mapstructure v1.4.3
+## explicit; go 1.14
 github.com/mitchellh/mapstructure
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+## explicit
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
+## explicit; go 1.12
 github.com/modern-go/reflect2
 # github.com/opentracing/opentracing-go v1.2.0
-## explicit
+## explicit; go 1.14
 github.com/opentracing/opentracing-go
 github.com/opentracing/opentracing-go/ext
 github.com/opentracing/opentracing-go/log
 # github.com/pkg/errors v0.9.1
+## explicit
 github.com/pkg/errors
 # github.com/satori/go.uuid v1.2.0
 ## explicit
@@ -192,35 +228,47 @@ github.com/uber/jaeger-client-go/thrift-gen/zipkincore
 github.com/uber/jaeger-client-go/transport
 github.com/uber/jaeger-client-go/utils
 # github.com/uber/jaeger-lib v2.4.0+incompatible
+## explicit
 github.com/uber/jaeger-lib/metrics
 # go.opencensus.io v0.23.0
+## explicit; go 1.13
 go.opencensus.io
 go.opencensus.io/internal
 go.opencensus.io/trace
 go.opencensus.io/trace/internal
 go.opencensus.io/trace/tracestate
 # go.uber.org/atomic v1.9.0
+## explicit; go 1.13
 go.uber.org/atomic
 # go.uber.org/multierr v1.7.0
+## explicit; go 1.14
 go.uber.org/multierr
 # go.uber.org/zap v1.19.1
+## explicit; go 1.13
 go.uber.org/zap
 go.uber.org/zap/buffer
 go.uber.org/zap/internal/bufferpool
 go.uber.org/zap/internal/color
 go.uber.org/zap/internal/exit
 go.uber.org/zap/zapcore
-# golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
-## explicit
+# golang.org/x/exp v0.0.0-20220518171630-0b5c67f07fdf
+## explicit; go 1.18
+golang.org/x/exp/constraints
+golang.org/x/exp/maps
+golang.org/x/exp/slices
+# golang.org/x/net v0.0.0-20220325170049-de3da57026de
+## explicit; go 1.17
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sys v0.0.0-20220209214540-3681064d5158
-## explicit
+# golang.org/x/sys v0.0.0-20220328115105-d36c6a25d886
+## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
-# google.golang.org/grpc v1.40.0
+# google.golang.org/grpc v1.45.0
+## explicit; go 1.14
 google.golang.org/grpc/metadata
-# google.golang.org/protobuf v1.27.1
+# google.golang.org/protobuf v1.28.0
+## explicit; go 1.11
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/descfmt

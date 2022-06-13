@@ -28,7 +28,7 @@ func NewInMemoryDB() (store.DB, error) {
 		return nil, err
 	}
 
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true))
 
 	if err != nil {
 		return nil, err

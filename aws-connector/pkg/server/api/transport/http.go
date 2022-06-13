@@ -60,27 +60,27 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	))
 
 	r.Methods("POST").Path("/create-ca").Handler(httptransport.NewServer(
-		e.DispatchRegistrationCodeEndpoint,
+		e.SignCertificateEndpoint,
 		decodeCreateCaRequest,
 		encodeResponse,
 		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CreateCA", logger)))...,
 	))
 
 	r.Methods("PUT").Path("/ca/status").Handler(httptransport.NewServer(
-		e.DispatchUpdateCAStatusEndpoint,
+		e.UpdateCAStatusEndpoint,
 		decodeUpdateCaStatusRequest,
 		encodeResponse,
 		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCAStatus", logger)))...,
 	))
 
 	r.Methods("PUT").Path("/cert/status").Handler(httptransport.NewServer(
-		e.DispatchUpdateCertStatusEndpoint,
+		e.UpdateCertStatusEndpoint,
 		decodeUpdateCertStatusRequest,
 		encodeResponse,
 		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCertStatus", logger)))...,
 	))
 	r.Methods("POST").Path("/attach-policy").Handler(httptransport.NewServer(
-		e.DispatchAttachIoTCorePolicyEndpoint,
+		e.AttachIoTCorePolicyEndpoint,
 		decodeAttachPolicyRequest,
 		encodeResponse,
 		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "AttachPolicy", logger)))...,
@@ -96,7 +96,7 @@ func decodeEmptyRequest(ctx context.Context, r *http.Request) (request interface
 
 func decodeCreateCaRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var createCaRequest endpoint.DispatchRegistrationCodeRequestRequest
+	var createCaRequest endpoint.RegistrationCodeRequestRequest
 	json.NewDecoder(r.Body).Decode(&createCaRequest)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func decodeGetThingConfigRequest(ctx context.Context, r *http.Request) (request 
 }
 func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var deleteCaRequest endpoint.DispatchUpdateCaStatusRequest
+	var deleteCaRequest endpoint.UpdateCaStatusRequest
 	json.NewDecoder(r.Body).Decode(&deleteCaRequest)
 	if err != nil {
 		return nil, err
@@ -127,16 +127,15 @@ func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request 
 }
 func decodeUpdateCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var updateCertStatusRequest endpoint.DispatchUpdateCertStatusRequest
+	var updateCertStatusRequest endpoint.UpdateCertStatusRequest
 	json.NewDecoder(r.Body).Decode(&updateCertStatusRequest)
 	if err != nil {
 		return nil, err
 	}
-
 	return updateCertStatusRequest, nil
 }
 func decodeAttachPolicyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var bindCAAwsPolicyRequest endpoint.DispatchAttachIoTCorePolicyRequest
+	var bindCAAwsPolicyRequest endpoint.AttachIoTCorePolicyRequest
 	json.NewDecoder(r.Body).Decode(&bindCAAwsPolicyRequest)
 	if err != nil {
 		return nil, err

@@ -7,26 +7,26 @@ type HealthResponse struct {
 	Err     error `json:"-"`
 }
 
-type DispatchAttachIoTCorePolicyRequest struct {
+type AttachIoTCorePolicyRequest struct {
 	Policy       string `json:"policy"`
 	CaName       string `json:"ca_name"`
 	SerialNumber string `json:"serial_number"`
 }
 
-type DispatchAttachIoTCorePolicyResponse struct {
+type AttachIoTCorePolicyResponse struct {
 }
 
-type DispatchRegistrationCodeRequestRequest struct {
+type RegistrationCodeRequestRequest struct {
 	CaName       string `json:"ca_name"`
 	CaCert       string `json:"ca_cert"`
 	SerialNumber string `json:"serial_number"`
 }
-type DispatchUpdateCaStatusRequest struct {
+type UpdateCaStatusRequest struct {
 	CaName        string `json:"ca_name"`
 	Status        string `json:"status"`
 	CertificateID string `json:"certificate_id"`
 }
-type DispatchUpdateCertStatusRequest struct {
+type UpdateCertStatusRequest struct {
 	DeviceID     string `json:"device_id"`
 	Status       string `json:"status"`
 	SerialNumber string `json:"serial_number"`
