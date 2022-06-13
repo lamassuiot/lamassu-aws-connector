@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassu-aws-connector
+module github.com/lamassuiot/lamassu-aws-connector/aws-connector
 
 go 1.18
 
@@ -13,7 +13,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/consul/api v1.12.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lamassuiot/lamassuiot v0.0.1
+	github.com/lamassuiot/lamassuiot v0.0.2
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible

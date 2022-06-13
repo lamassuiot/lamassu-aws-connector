@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/service"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 

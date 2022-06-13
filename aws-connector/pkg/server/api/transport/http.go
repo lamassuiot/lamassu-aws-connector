@@ -11,10 +11,10 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
-	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/endpoint"
-	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/errors"
-	lamassuErrors "github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/errors"
-	"github.com/lamassuiot/lamassu-aws-connector/pkg/server/api/service"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/endpoint"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/errors"
+	lamassuErrors "github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/errors"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
 
 	stdopentracing "github.com/opentracing/opentracing-go"
 )

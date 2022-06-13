@@ -170,7 +170,7 @@ github.com/klauspost/compress/huff0
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/lamassuiot/lamassuiot v0.0.1
+# github.com/lamassuiot/lamassuiot v0.0.2
 ## explicit; go 1.18
 github.com/lamassuiot/lamassuiot/pkg/ca/client
 github.com/lamassuiot/lamassuiot/pkg/ca/common/dto

@@ -10,10 +10,10 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
-	"github.com/lamassuiot/aws-connector/pkg/server/api/transport"
-	"github.com/lamassuiot/aws-connector/pkg/server/config"
-	"github.com/lamassuiot/aws-connector/pkg/server/store/db"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/transport"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/config"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/store/db"
 	"github.com/opentracing/opentracing-go"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -21,7 +21,7 @@ import (
 	awsSts "github.com/aws/aws-sdk-go/service/sts"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lamassuiot/aws-connector/pkg/server/discovery/consul"
+	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/discovery/consul"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
