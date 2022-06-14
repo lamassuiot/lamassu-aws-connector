@@ -4,6 +4,6 @@ import * as cdk from '@aws-cdk/core';
 import { LamassuCdkStack } from '../lib/cdk-stack';
 
 const app = new cdk.App();
-const envIkerlan  = { account: '345876576284', region: 'eu-west-1' };
+const env = { account: process.env.AWS_ACCOUNT_ID, region: process.env.AWS_DEFAULT_REGION };
 
-new LamassuCdkStack(app, 'LamassuCdkStack', {env : envIkerlan});
+new LamassuCdkStack(app, 'LamassuCdkStack', {env : env});

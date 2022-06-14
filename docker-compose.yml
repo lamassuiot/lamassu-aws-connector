@@ -1,0 +1,43 @@
+version: '3'
+
+volumes:
+  aws_cloud_connector_data:
+ 
+networks:
+  default:
+    name: lamassu-iot-network
+    external: true
+
+services:
+  aws-connector:
+    image: lamassuiot/lamassu-aws-connector:latest
+    container_name: aws-connector
+    environment:
+      CONNECTOR_PORT: 8989
+      CONNECTOR_TYPE: aws
+      CONNECTOR_PROTOCOL: http
+      CONNECTOR_NAME: ${CONNECTOR_NAME}
+      CONNECTOR_PERSISTENCE_DIR: /id
+      JAEGER_SERVICE_NAME: aws-connector
+      JAEGER_AGENT_HOST: jaeger
+      JAEGER_AGENT_PORT: "6831"
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: "1"
+      JAEGER_REPORTER_LOG_SPANS: "false"
+      CONSUL_PROTOCOL: https
+      CONSUL_HOST: consul-server
+      CONSUL_PORT: 8501
+      CONSUL_CA: /certs/internal-ca.crt
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      AWS_SQS_INBOUND_QUEUE_NAME: lamassuResponse
+      LAMASSU_CA_ADDRESS: lamassu-ca:8087
+      LAMASSU_CA_CERT_FILE: /certs/internal-ca.crt
+      LAMASSU_CA_CLIENT_CERT_FILE: /certs/tls.crt
+      LAMASSU_CA_CLIENT_KEY_FILE: /certs/tls.key
+    volumes:
+      - aws_cloud_connector_data:/id
+      - ./tls-certificates/upstream/ca.crt:/certs/internal-ca.crt
+      - ./tls-certificates/upstream/aws-connector/tls.crt:/certs/tls.crt
+      - ./tls-certificates/upstream/aws-connector/tls.key:/certs/tls.key
