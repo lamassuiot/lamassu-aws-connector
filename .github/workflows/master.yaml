@@ -35,7 +35,7 @@ jobs:
       uses: docker/build-push-action@v2
       with:
         file: aws-connector/Dockerfile
-        context: ./aws-connector
+        context: ./aws-connector/
         tags: |
           lamassuiot/lamassu-aws-connector:${{ needs.tag_generator.outputs.new-tag }}
           lamassuiot/lamassu-aws-connector:latest
