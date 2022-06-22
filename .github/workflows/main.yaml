@@ -1,9 +1,9 @@
-name: Master Workflow
+name: Main Workflow
 
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   tag_generator:
@@ -17,7 +17,7 @@ jobs:
         uses: mathieudutour/github-tag-action@v6.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          release_branches : "master,main,develop"
+          release_branches : "main"
 
   build_aws_connector_docker_image:
     name: AWS Connector - Release docker images
