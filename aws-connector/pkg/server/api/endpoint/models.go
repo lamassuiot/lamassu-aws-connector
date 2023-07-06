@@ -1,12 +1,5 @@
 package endpoint
 
-type EmptyRequest struct{}
-
-type HealthResponse struct {
-	Healthy bool  `json:"healthy,omitempty"`
-	Err     error `json:"-"`
-}
-
 type AttachIoTCorePolicyRequest struct {
 	Policy       string `json:"policy"`
 	CaName       string `json:"ca_name"`
@@ -61,11 +54,13 @@ type UpdateThingConfigurationRequest struct {
 	Config   interface{}
 	DeviceID string
 }
+
 type HandleUpdateCertStatusCodeRequest struct {
 	CaName       string `json:"ca_name"`
 	Status       string `json:"status"`
 	SerialNumber string `json:"serial_number"`
 }
+
 type HandleUpdateCAStatusCodeRequest struct {
 	CaID           string `json:"ca_id"`
 	CaName         string `json:"ca_name"`

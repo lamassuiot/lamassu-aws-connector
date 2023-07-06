@@ -1,46 +1,48 @@
 package config
 
-import "github.com/kelseyhightower/envconfig"
+import "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 
-// RabbitMQ
-// Esto podria ser la config de un consumer
-// Puede que cambie para publisher
-type Config struct {
-	ConnectorPort           string `required:"true" split_words:"true"`
+type AWSConnectorConfig struct {
+	server.BaseConfiguration
+
 	ConnectorType           string `required:"true" split_words:"true"`
-	ConnectorProtocol       string `required:"true" split_words:"true"`
 	ConnectorName           string `required:"true" split_words:"true"`
 	ConnectorPersistenceDir string `required:"true" split_words:"true"`
 
-	User           string
-	Password       string
-	Exchange       string
-	Queue          string
-	RoutingKey     string
-	ConsumerTag    string
-	WorkerPoolSize int
+	Exchange string
+	Queue    string
 
-	ConsulProtocol string `required:"true" split_words:"true"`
-	ConsulHost     string `required:"true" split_words:"true"`
-	ConsulPort     string `required:"true" split_words:"true"`
-	ConsulCA       string `required:"true" split_words:"true"`
+	ConsulProtocol           string `required:"true" split_words:"true"`
+	ConsulHost               string `required:"true" split_words:"true"`
+	ConsulPort               string `required:"true" split_words:"true"`
+	ConsulCA                 string `required:"true" split_words:"true"`
+	ConsulInsecureSkipVerify bool   `required:"true" split_words:"true"`
 
-	AwsAccessKeyID         string `required:"true" split_words:"true"`
-	AwsSecretAccessKey     string `required:"true" split_words:"true"`
-	AwsDefaultRegion       string `required:"true" split_words:"true"`
-	AwsSqsInboundQueueName string `required:"true" split_words:"true"`
+	AWSAccessKeyID          string `required:"true" split_words:"true"`
+	AWSSecretAccessKey      string `required:"true" split_words:"true"`
+	AWSDefaultRegion        string `required:"true" split_words:"true"`
+	AWSSqsInboundQueueName  string `required:"true" split_words:"true"`
+	AWSSqsOutboundQueueName string `split_words:"true"`
 
-	LamassuCACertFile       string `required:"true" split_words:"true"`
-	LamassuCAClientCertFile string `required:"true" split_words:"true"`
-	LamassuCAClientKeyFile  string `required:"true" split_words:"true"`
-	LamassuCAAddress        string `required:"true" split_words:"true"`
+	LamassuCAAddress                       string `required:"true" split_words:"true"`
+	LamassuCACertFile                      string `split_words:"true"`
+	LamassuCAInsecureSkipVerify            bool   `required:"true" split_words:"true"`
+	LamassuDMSAddress                      string `required:"true" split_words:"true"`
+	LamassuDMSCertFile                     string `split_words:"true"`
+	LamassuDMSInsecureSkipVerify           bool   `required:"true" split_words:"true"`
+	LamassuDeviceManagerAddress            string `required:"true" split_words:"true"`
+	LamassuDeviceManagerCertFile           string `split_words:"true"`
+	LamassuDeviceManagerInsecureSkipVerify bool   `required:"true" split_words:"true"`
 }
 
-func NewConfig(prefix string) (error, Config) {
-	var cfg Config
-	err := envconfig.Process(prefix, &cfg)
-	if err != nil {
-		return err, Config{}
-	}
-	return nil, cfg
+func NewAWSConnectorConfig() *AWSConnectorConfig {
+	return &AWSConnectorConfig{}
+}
+
+func (c *AWSConnectorConfig) GetBaseConfiguration() *server.BaseConfiguration {
+	return &c.BaseConfiguration
+}
+
+func (c *AWSConnectorConfig) GetConfiguration() interface{} {
+	return c
 }
