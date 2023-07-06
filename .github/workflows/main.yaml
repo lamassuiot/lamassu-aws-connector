@@ -5,17 +5,15 @@ on:
     inputs:
       release_version:
         type: string
-        description: release version when building docker containers (example&#58; 2.0.0)
+        description: release version when building docker containers (example; 2.0.0)
   # # push:
   #   branches:
   #     - main
 
 jobs:
-
   build_aws_connector_docker_image:
     name: AWS Connector - Release docker images
     runs-on: ubuntu-latest
- 
     steps:        
     - name: Login to DockerHub
       uses: docker/login-action@v1 
@@ -27,7 +25,8 @@ jobs:
     - name: Build AWS Connector docker image
       uses: docker/build-push-action@v2
       with:
-        file: ci/ca.dockerfile
+        context: ./aws-connector
+        file: aws-connector/Dockerfile
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
