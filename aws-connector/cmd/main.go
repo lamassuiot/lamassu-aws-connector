@@ -6,124 +6,161 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/transport"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/config"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/store/db"
-	"github.com/opentracing/opentracing-go"
-
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	awsIot "github.com/aws/aws-sdk-go/service/iot"
-	awsSts "github.com/aws/aws-sdk-go/service/sts"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/discovery/consul"
+	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
+	"github.com/lamassuiot/aws-connector/pkg/server/api/transport"
+	"github.com/lamassuiot/aws-connector/pkg/server/config"
+	"github.com/lamassuiot/aws-connector/pkg/server/store/db"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/discovery"
+	cloudprovidertransport "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/transport"
+	lamassudevmanager "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
+	lamassudmsclient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-	jaegercfg "github.com/uber/jaeger-client-go/config"
-	jaegerlog "github.com/uber/jaeger-client-go/log"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {
+	config := config.NewAWSConnectorConfig()
+	mainServer := server.NewServer(config)
 
-	// Define logger
-	var logger log.Logger
-	{
-		logger = log.NewJSONLogger(os.Stdout)
-		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-		logger = level.NewFilter(logger, level.AllowInfo())
-		logger = log.With(logger, "caller", log.DefaultCaller)
-	}
-
-	// Read environment variables
-	err, cfg := config.NewConfig("")
+	var caClient lamassucaclient.LamassuCAClient
+	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not read environment configuration values")
-		os.Exit(1)
+		log.Fatal("Could not parse CA URL: ", err)
 	}
-	level.Info(logger).Log("msg", "Environment configuration values loaded")
 
-	jcfg, err := jaegercfg.FromEnv()
+	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			// AuthMethodConfig: &clientUtils.JWTConfig{
+			// 	Username: "enroller",
+			// 	Password: "enroller",
+			// 	Insecure: true,
+			// 	URL: &url.URL{
+			// 		Scheme: "https",
+			// 		Host:   "auth.pre.lamassu.zpd.ikerlan.es",
+			// 	},
+			// },
+			CACertificate: config.LamassuCACertFile,
+			Insecure:      config.LamassuCAInsecureSkipVerify,
+		})
+		if err != nil {
+			log.Fatal("Could not create LamassuCA client: ", err)
+		}
+	} else {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			log.Fatal("Could not create LamassuCA client: ", err)
+		}
+	}
+	var dmsClient lamassudmsclient.LamassuDMSManagerClient
+	parsedLamassuDMSURL, err := url.Parse(config.LamassuDMSAddress)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not load Jaeger configuration values fron environment")
-		os.Exit(1)
+		log.Fatal("Could not parse LamassuDMS url: ", err)
 	}
-	level.Info(logger).Log("msg", "Jaeger configuration values loaded")
 
-	tracer, closer, err := jcfg.NewTracer(
-		jaegercfg.Logger(jaegerlog.StdLogger),
-	)
-	opentracing.SetGlobalTracer(tracer)
+	if strings.HasPrefix(config.LamassuDMSAddress, "https") {
+		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDMSURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuDMSCertFile,
+			Insecure:      config.LamassuDMSInsecureSkipVerify,
+		})
+		if err != nil {
+			log.Fatal("Could not create LamassuCA client: ", err)
+		}
+	} else {
+		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDMSURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			log.Fatal("Could not create LamassuCA client: ", err)
+		}
+	}
 
+	var devManagerClient lamassudevmanager.LamassuDeviceManagerClient
+	parsedLamassuDevManagerURL, err := url.Parse(config.LamassuDeviceManagerAddress)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start Jaeger tracer")
-		os.Exit(1)
-	}
-	defer closer.Close()
-	level.Info(logger).Log("msg", "Jaeger tracer started")
-
-	consulsd, err := consul.NewServiceDiscovery(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.ConsulCA, logger)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with Consul Service Discovery")
-		os.Exit(1)
+		log.Fatal("Could not parse Device Manager URL: ", err)
 	}
 
-	level.Info(logger).Log("msg", "Connection established with Consul Service Discovery")
-	connectorID, err := consulsd.Register(cfg.ConnectorProtocol, cfg.ConnectorPort, []string{cfg.ConnectorType}, cfg.ConnectorName, cfg.ConnectorPersistenceDir)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not register service liveness information to Consul")
-		os.Exit(1)
+	if strings.HasPrefix(config.LamassuDeviceManagerAddress, "https") {
+		devManagerClient, err = lamassudevmanager.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDevManagerURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuDeviceManagerCertFile,
+		})
+		if err != nil {
+			log.Fatal("Could not create Device Manager client: ", err)
+		}
+	} else {
+		devManagerClient, err = lamassudevmanager.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDevManagerURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			log.Fatal("Could not create Device Manager client: ", err)
+		}
 	}
-	level.Info(logger).Log("msg", "Service liveness information registered to Consul")
 
-	lamassuCAClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.ClientConfiguration{
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   cfg.LamassuCAAddress,
-		},
-		AuthMethod: clientUtils.MutualTLS,
-		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: cfg.LamassuCAClientCertFile,
-			ClientKey:  cfg.LamassuCAClientKeyFile,
-		},
-		CACertificate: cfg.LamassuCACertFile,
-	})
+	consulsd, err := discovery.NewServiceDiscovery(config.ConsulProtocol, config.ConsulHost, config.ConsulPort, config.ConsulCA, config.ConsulInsecureSkipVerify)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create Lamassu CA Client")
-		os.Exit(1)
+		log.Fatal("Could not create Consul client: ", err)
 	}
+
+	healthy, _, err := consulsd.CheckHealth()
+	if err != nil {
+		log.Fatal("Could not check Consul health: ", err)
+	}
+
+	if !healthy {
+		log.Fatal("Consul is not healthy")
+	} else {
+		log.Info("Consul is healthy")
+	}
+
+	connectorID, err := consulsd.Register(config.Protocol, config.Port, []string{config.ConnectorType}, config.ConnectorName, config.ConnectorPersistenceDir)
+	if err != nil {
+		log.Fatal("Could not register service liveness information to Consul: ", err)
+	}
+	log.Info(fmt.Sprintf("Service liveness information registered to Consul. ID: %s", connectorID))
 
 	dbStore, err := db.NewInMemoryDB()
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create InMemory DB")
-		os.Exit(1)
+		log.Fatal("Could not create InMemory DB: ", err)
 	}
 
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(cfg.AwsDefaultRegion),
-		Credentials: credentials.NewStaticCredentials(cfg.AwsAccessKeyID, cfg.AwsSecretAccessKey, ""),
-	}))
-	awsSts := awsSts.New(sess, aws.NewConfig())
-	awsSvc := awsIot.New(sess, aws.NewConfig())
-
-	awsIdentity, err := awsSts.GetCallerIdentity(nil)
+	svc, err := service.NewAwsConnectorService(connectorID, caClient, dmsClient, devManagerClient, dbStore, config.AWSDefaultRegion, config.AWSAccessKeyID, config.AWSSecretAccessKey, config.AWSSqsOutboundQueueName)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not get AWS Identity")
-		os.Exit(1)
+		log.Fatal("Could not create AWS Connector Service: ", err)
 	}
 
-	svc := service.NewAwsConnectorService(logger, connectorID, lamassuCAClient, dbStore, awsSvc, *awsIdentity.Account)
-	transport.MakeSqsHandler(svc, logger, tracer, cfg.AwsDefaultRegion, *awsIdentity.Account, cfg.AwsSqsInboundQueueName)
+	svc = service.LoggingMiddleware()(svc)
 
-	http.Handle("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc, log.With(logger, "component", "HTTP"), tracer)))
-
-	http := &http.Server{
-		Addr: ":" + cfg.ConnectorPort,
-	}
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", cloudprovidertransport.MakeHTTPHandler(svc)))
+	// transport.MakeSQSHandler(svc, config.AWSSqsInboundQueueName)
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))
 
 	errs := make(chan error)
 	go func() {
@@ -132,8 +169,7 @@ func main() {
 		errs <- fmt.Errorf("%s", <-c)
 	}()
 
-	http.ListenAndServe()
-
-	level.Info(logger).Log("exit", <-errs)
-
+	mainServer.Run()
+	forever := make(chan struct{})
+	<-forever
 }

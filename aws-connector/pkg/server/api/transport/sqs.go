@@ -10,21 +10,18 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/endpoint"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
+	"github.com/lamassuiot/aws-connector/pkg/server/api/endpoint"
+	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
 	sqsSvc *sqs.SQS
 )
 
-func pollMessages(chn chan<- *sqs.Message, logger log.Logger, sqsURL string) {
+func pollMessages(chn chan<- *sqs.Message, sqsURL string) {
 
-	level.Info(logger).Log("msg", "Polling messages from SQS")
-
+	log.Info("Polling messages from SQS")
 	for {
 		output, err := sqsSvc.ReceiveMessage(&sqs.ReceiveMessageInput{
 			QueueUrl:            aws.String(sqsURL),
@@ -33,7 +30,7 @@ func pollMessages(chn chan<- *sqs.Message, logger log.Logger, sqsURL string) {
 		})
 
 		if err != nil {
-			level.Error(logger).Log("err", err, "msg", "Error polling messages from SQS")
+			log.Warn("Error polling messages from SQS: ", err)
 		}
 
 		for _, message := range output.Messages {
@@ -43,61 +40,60 @@ func pollMessages(chn chan<- *sqs.Message, logger log.Logger, sqsURL string) {
 
 }
 
-func handleMessage(msg *sqs.Message, e endpoint.Endpoints, logger log.Logger) error {
+func handleMessage(msg *sqs.Message, e endpoint.Endpoints) error {
 	var event cloudevents.Event
 	json.Unmarshal([]byte(*msg.Body), &event)
 
-	level.Info(logger).Log("msg", "Received message from SQS type="+event.Type())
 	jsonM, _ := event.MarshalJSON()
-	fmt.Println(string(jsonM))
+	log.Debug(fmt.Sprintf("Incoming SQS message. SQS Message ID %s. Event type %s. Event JSON: %s", *msg.MessageId, event.Type(), string(jsonM)))
 
 	switch event.Type() {
 	case "io.lamassu.iotcore.cert.status.update":
 		var eventData endpoint.HandleUpdateCertStatusCodeRequest
 		json.Unmarshal(event.Data(), &eventData)
-		level.Info(logger).Log("msg", eventData)
+		log.Info(eventData)
 		_, err := e.HandleUpdateCertificateStatusEndpoint(context.Background(), eventData)
-		level.Debug(logger).Log("msg", eventData)
 		return err
 
 	case "io.lamassu.iotcore.ca.status.update":
 		var eventData endpoint.HandleUpdateCAStatusCodeRequest
 		json.Unmarshal(event.Data(), &eventData)
 		_, err := e.HandleUpdateCAStatusEndpoint(context.Background(), eventData)
-		level.Debug(logger).Log("msg", eventData)
+		log.Info(eventData)
 		return err
 
 	default:
-		level.Error(logger).Log("msg", "no matching evene type for incoming SQS message with type: "+event.Type())
+		log.Warn(fmt.Sprintf("no matching evene type for incoming SQS message with type:%s ", event.Type()))
 		return errors.New("unhandeled message")
 	}
-
-	return nil
 }
 
-func deleteMessage(msg *sqs.Message, logger log.Logger, sqsURL string) {
+func deleteMessage(msg *sqs.Message, sqsURL string) {
 	sqsSvc.DeleteMessage(&sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(sqsURL),
 		ReceiptHandle: msg.ReceiptHandle,
 	})
-	level.Info(logger).Log("msg", "Deleted message from SQS")
+	log.Trace(fmt.Sprintf("Deleted message from SQS with Message ID: %s", *msg.MessageId))
 }
 
-func MakeSqsHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer, awsRegion string, awsAccountID, awsSQSInboundQueueName string) {
-	e := endpoint.MakeServerEndpoints(s, otTracer)
+func MakeSQSHandler(s service.Service, awsSQSInboundQueueName string) {
+	e := endpoint.MakeServerEndpoints(s)
+	awsRegion := s.GetDefaultRegion()
+	awsAccountID := s.GetAccountID()
 	sqsURL := "https://sqs." + awsRegion + ".amazonaws.com/" + awsAccountID + "/" + awsSQSInboundQueueName
+
 	go func() {
-		sess := session.Must(session.NewSessionWithOptions(session.Options{Config: aws.Config{Region: aws.String("eu-west-1")}}))
+		sess := session.Must(session.NewSessionWithOptions(session.Options{Config: aws.Config{Region: aws.String(awsRegion)}}))
 
 		sqsSvc = sqs.New(sess)
 
 		chnMessages := make(chan *sqs.Message, 2)
-		go pollMessages(chnMessages, logger, sqsURL)
+		go pollMessages(chnMessages, sqsURL)
 
 		for message := range chnMessages {
-			err := handleMessage(message, e, logger)
+			err := handleMessage(message, e)
 			if err == nil {
-				deleteMessage(message, logger, sqsURL)
+				deleteMessage(message, sqsURL)
 			}
 		}
 	}()

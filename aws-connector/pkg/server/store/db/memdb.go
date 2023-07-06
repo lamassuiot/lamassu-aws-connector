@@ -7,7 +7,7 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v3"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/store"
+	"github.com/lamassuiot/aws-connector/pkg/server/store"
 )
 
 type BadgerDB struct {

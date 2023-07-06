@@ -3,169 +3,71 @@ package endpoint
 import (
 	"context"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/lamassuiot/lamassu-aws-connector/aws-connector/pkg/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
+	api "github.com/lamassuiot/aws-connector/pkg/common"
+	"github.com/lamassuiot/aws-connector/pkg/server/api/service"
+	cProviderEndpoint "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/endpoint"
 )
 
 type Endpoints struct {
-	HealthEndpoint                        endpoint.Endpoint
-	AttachIoTCorePolicyEndpoint           endpoint.Endpoint
-	SignCertificateEndpoint               endpoint.Endpoint
-	GetThingsConfigurationEndpoint        endpoint.Endpoint
-	UpdateThingsConfigurationEndpoint     endpoint.Endpoint
-	GetConfigurationEndpoint              endpoint.Endpoint
-	UpdateConfigurationEndpoint           endpoint.Endpoint
-	UpdateCAStatusEndpoint                endpoint.Endpoint
-	UpdateCertStatusEndpoint              endpoint.Endpoint
+	cProviderEndpoint.Endpoints
 	HandleUpdateCertificateStatusEndpoint endpoint.Endpoint
 	HandleUpdateCAStatusEndpoint          endpoint.Endpoint
+	HandleCloudEvents                     endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
+func MakeServerEndpoints(s service.Service) Endpoints {
+	e := cProviderEndpoint.MakeServerEndpoints(s)
 
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-	}
+	updateCAtatus := MakeHandleUpdateCAStatusEndpoint(s)
+	updateCertificateStatus := MakeHandleUpdateCertificateStatusEndpoint(s)
+	cloudEvents := MakeHandleCloudEvents(s)
 
-	var AttachIoTCorePolicyEndpoint endpoint.Endpoint
-	{
-		AttachIoTCorePolicyEndpoint = MakeAttachIoTCorePolicyEndpoint(s)
-	}
-
-	var UpdateCAStatusEndpoint endpoint.Endpoint
-	{
-		UpdateCAStatusEndpoint = MakeUpdateCAStatusEndpoint(s)
-	}
-	var UpdateCertStatusEndpoint endpoint.Endpoint
-	{
-		UpdateCertStatusEndpoint = MakeUpdateCertStatusEndpoint(s)
-	}
-	var signCertificateEndpoint endpoint.Endpoint
-	{
-		signCertificateEndpoint = MakeSignCertificateEndpoint(s)
-	}
-
-	var getConfigurationEndpoint endpoint.Endpoint
-	{
-		getConfigurationEndpoint = MakeGetConfigurationEndpoint(s)
-	}
-	var getThingsConfigurationEndpoint endpoint.Endpoint
-	{
-		getThingsConfigurationEndpoint = MakeGetThingsConfigurationEndpoint(s)
-	}
-	var updateThingsConfigurationEndpoint endpoint.Endpoint
-	{
-		updateThingsConfigurationEndpoint = MakeUpdateThingsConfigurationEndpoint(s)
-	}
-	var updateConfigurationEndpoint endpoint.Endpoint
-	{
-		updateConfigurationEndpoint = MakeUpdateConfigurationEndpoint(s)
-	}
-	var updateCertificateStatus endpoint.Endpoint
-	{
-		updateCertificateStatus = MakeHandleUpdateCertificateStatusEndpoint(s)
-	}
-	var updateCAtatus endpoint.Endpoint
-	{
-		updateCAtatus = MakeHandleUpdateCAStatusEndpoint(s)
-	}
 	return Endpoints{
-		HealthEndpoint:                        healthEndpoint,
-		AttachIoTCorePolicyEndpoint:           AttachIoTCorePolicyEndpoint,
-		SignCertificateEndpoint:               signCertificateEndpoint,
-		GetThingsConfigurationEndpoint:        getThingsConfigurationEndpoint,
-		UpdateThingsConfigurationEndpoint:     updateThingsConfigurationEndpoint,
-		GetConfigurationEndpoint:              getConfigurationEndpoint,
-		UpdateConfigurationEndpoint:           updateConfigurationEndpoint,
-		UpdateCAStatusEndpoint:                UpdateCAStatusEndpoint,
-		UpdateCertStatusEndpoint:              UpdateCertStatusEndpoint,
+		Endpoints: cProviderEndpoint.Endpoints{
+			RegisterCAEndpoint:                                e.RegisterCAEndpoint,
+			UpdateConfigurationEndpoint:                       e.UpdateConfigurationEndpoint,
+			GetConfigurationEndpoint:                          e.GetConfigurationEndpoint,
+			GetDeviceConfigurationEndpoint:                    e.GetDeviceConfigurationEndpoint,
+			UpdateCAStatusEndpoint:                            e.UpdateCAStatusEndpoint,
+			UpdateDeviceCertificateStatusEndpoint:             e.UpdateDeviceCertificateStatusEndpoint,
+			UpdateDeviceDigitalTwinReenrollmentStatusEndpoint: e.UpdateDeviceDigitalTwinReenrollmentStatusEndpoint,
+		},
 		HandleUpdateCertificateStatusEndpoint: updateCertificateStatus,
 		HandleUpdateCAStatusEndpoint:          updateCAtatus,
-	}
-}
-
-func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		healthy := s.Health(ctx)
-		return HealthResponse{Healthy: healthy}, nil
-	}
-}
-
-func MakeAttachIoTCorePolicyEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(AttachIoTCorePolicyRequest)
-		err := s.AttachIoTCorePolicy(ctx, req.CaName, req.SerialNumber, req.Policy)
-		return AttachIoTCorePolicyResponse{}, err
-	}
-}
-
-func MakeUpdateCAStatusEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(UpdateCaStatusRequest)
-		err := s.UpdateCAStatusRequest(ctx, req.CaName, req.Status, req.CertificateID)
-		return "OK", err
-	}
-}
-func MakeUpdateCertStatusEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(UpdateCertStatusRequest)
-		err := s.UpdateCertStatusRequest(ctx, req.DeviceID, req.SerialNumber, req.Status, req.DeviceCert, req.CaCert)
-		return "OK", err
-	}
-}
-
-func MakeSignCertificateEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(RegistrationCodeRequestRequest)
-		err := s.SignRegistrationCode(ctx, req.CaName, req.CaCert, req.SerialNumber)
-		return CreateCAResponse{}, err
-	}
-}
-
-func MakeGetThingsConfigurationEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(GetThingConfigurationRequest)
-		config, err := s.GetThingConfiguration(ctx, req.DeviceID)
-		return GetThingConfigurationResponse{ThingConfig: config}, err
-	}
-}
-
-func MakeUpdateThingsConfigurationEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(UpdateThingConfigurationRequest)
-		err := s.HandleUpdateThingConfiguration(ctx, req.DeviceID, req.Config)
-		return nil, err
-	}
-}
-func MakeGetConfigurationEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		config, err := s.GetConfiguration(ctx)
-		return GetConfigurationResponse{Config: config}, err
-	}
-}
-
-func MakeUpdateConfigurationEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(UpdateConfigurationRequest)
-		err := s.HandleUpdateConfiguration(ctx, req.Config)
-		return nil, err
+		HandleCloudEvents:                     cloudEvents,
 	}
 }
 
 func MakeHandleUpdateCAStatusEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(HandleUpdateCAStatusCodeRequest)
-		err := s.HandleUpdateCAStatus(ctx, req.CaName, req.CaSerialNumber, req.CaID, req.Status)
+		err := s.HandleUpdateCAStatus(ctx, &api.HandleUpdateCAStatusInput{
+			CaName:         req.CaName,
+			CaSerialNumber: req.CaSerialNumber,
+			CaID:           req.CaID,
+			Status:         req.Status,
+		})
 		return nil, err
 	}
 }
 
+func MakeHandleCloudEvents(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		event := request.(cloudevents.Event)
+		err = s.HandleCloudEvents(ctx, event)
+		return nil, err
+	}
+}
 func MakeHandleUpdateCertificateStatusEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(HandleUpdateCertStatusCodeRequest)
-		err := s.HandleUpdateCertificateStatus(ctx, req.CaName, req.SerialNumber, req.Status)
+		err := s.HandleUpdateCertificateStatus(ctx, &api.HandleUpdateCertificateStatusInput{
+			CaName:       req.CaName,
+			SerialNumber: req.SerialNumber,
+			Status:       req.Status,
+		})
 		return nil, err
 	}
 }
