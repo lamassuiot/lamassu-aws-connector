@@ -26,13 +26,14 @@ import (
 	"github.com/lamassuiot/aws-connector/pkg/server/store"
 	"github.com/lamassuiot/aws-connector/pkg/server/utils"
 	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	cProvderApi "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/common/api"
 	cProviderService "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/service"
 	lamassuDevManagerClient "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
 	devApi "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	lamassudmsclient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
 	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
@@ -49,7 +50,7 @@ type Service interface {
 
 type awsService struct {
 	ID                   string
-	lamassuCAClient      lamassuCAClient.LamassuCAClient
+	lamassuCAClient      serviceV3.CAService
 	dmsClient            lamassudmsclient.LamassuDMSManagerClient
 	devManagerClient     lamassuDevManagerClient.LamassuDeviceManagerClient
 	db                   store.DB
@@ -61,7 +62,7 @@ type awsService struct {
 	sqsSvc               *sqs.SQS
 }
 
-func NewAwsConnectorService(connectorId string, lamassuCAClient lamassuCAClient.LamassuCAClient, dmsClient lamassudmsclient.LamassuDMSManagerClient, devManagerClient lamassuDevManagerClient.LamassuDeviceManagerClient, db store.DB, awsDefaultRegion string, awsKeyID string, awsKeySecret string, awsSQSOutboundQueueName string) (Service, error) {
+func NewAwsConnectorService(connectorId string, lamassuCAClient serviceV3.CAService, dmsClient lamassudmsclient.LamassuDMSManagerClient, devManagerClient lamassuDevManagerClient.LamassuDeviceManagerClient, db store.DB, awsDefaultRegion string, awsKeyID string, awsKeySecret string, awsSQSOutboundQueueName string) (Service, error) {
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(awsDefaultRegion),
 		Credentials: credentials.NewStaticCredentials(awsKeyID, awsKeySecret, ""),
@@ -302,19 +303,20 @@ func (s *awsService) RegisterCA(ctx context.Context, input *cProvderApi.Register
 	}
 
 	// Sign verification certificate CSR
-	singOutput, err := s.lamassuCAClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
-		CAType:                    caApi.CATypePKI,
-		CAName:                    input.CAName,
-		CertificateSigningRequest: csr,
-		SignVerbatim:              false,
-		CommonName:                csr.Subject.CommonName,
+	singOutput, err := s.lamassuCAClient.SignCertificate(serviceV3.SignCertificateInput{
+		CAID:        input.CAName,
+		CertRequest: (*models.X509CertificateRequest)(csr),
+		Subject: models.Subject{
+			CommonName: csr.Subject.CommonName,
+		},
+		SignVerbatim: false,
 	})
 	if err != nil {
 		return &cProvderApi.RegisterCAOutput{}, err
 	}
 
 	verificationCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: singOutput.Certificate.Raw})
-	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: singOutput.CACertificate.Raw})
+	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: singOutput.Certificate.Raw})
 
 	serialN := &awsIot.Tag{
 		Key:   aws.String("serialNumber"),
@@ -509,24 +511,21 @@ func (s *awsService) UpdateDeviceCertificateStatus(ctx context.Context, input *c
 			return &cProvderApi.UpdateDeviceCertificateStatusOutput{}, err
 		}
 
-		caOutput, err := s.lamassuCAClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
-			CAType: caApi.CATypePKI,
-			CAName: input.CAName,
+		caOutput, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+			CAID: input.CAName,
 		})
 		if err != nil {
 			return &cProvderApi.UpdateDeviceCertificateStatusOutput{}, err
 		}
 
-		certificateOutput, err := s.lamassuCAClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
-			CAType:                  caApi.CATypePKI,
-			CAName:                  input.CAName,
-			CertificateSerialNumber: input.SerialNumber,
+		certificateOutput, err := s.lamassuCAClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+			SerialNumber: input.SerialNumber,
 		})
 		if err != nil {
 			return &cProvderApi.UpdateDeviceCertificateStatusOutput{}, err
 		}
 
-		certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateOutput.Certificate.Certificate.Raw})
+		certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificateOutput.Certificate.Raw})
 		caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caOutput.Certificate.Certificate.Raw})
 
 		registerCertificateResponse, err := s.awsIotSvc.RegisterCertificate(&awsIot.RegisterCertificateInput{
@@ -835,11 +834,9 @@ func (s *awsService) HandleCloudEvents(ctx context.Context, event cloudevents.Ev
 
 func (s *awsService) HandleUpdateCertificateStatus(ctx context.Context, input *api.HandleUpdateCertificateStatusInput) error {
 	if input.Status == "REVOKED" {
-		_, err := s.lamassuCAClient.RevokeCertificate(ctx, &caApi.RevokeCertificateInput{
-			CAType:                  caApi.CATypePKI,
-			CAName:                  input.CaName,
-			CertificateSerialNumber: input.SerialNumber,
-			RevocationReason:        "Revoked thorugh AWS",
+		_, err := s.lamassuCAClient.UpdateCertificateStatus(serviceV3.UpdateCertificateStatusInput{
+			SerialNumber: input.SerialNumber,
+			NewStatus:    models.StatusRevoked,
 		})
 		if err != nil {
 			switch err.(type) {

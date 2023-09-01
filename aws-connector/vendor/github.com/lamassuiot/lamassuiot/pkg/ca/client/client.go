@@ -120,12 +120,12 @@ func (c *lamassuCaClientConfig) IterateCAsWithPredicate(ctx context.Context, inp
 func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 	var caExpiration, issuanceExpiration string
-	if input.ExpirationType == api.ExpirationTypeDate {
+	if input.IssuanceExpirationType == api.ExpirationTypeDate {
 		caExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.CAExpiration.Year(), input.CAExpiration.Month(), input.CAExpiration.Day(), input.CAExpiration.Hour(), input.CAExpiration.Minute(), input.CAExpiration.Second())
-		issuanceExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.IssuanceExpiration.Year(), input.IssuanceExpiration.Month(), input.IssuanceExpiration.Day(), input.IssuanceExpiration.Hour(), input.IssuanceExpiration.Minute(), input.IssuanceExpiration.Second())
+		issuanceExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.IssuanceExpirationDate.Year(), input.IssuanceExpirationDate.Month(), input.IssuanceExpirationDate.Day(), input.IssuanceExpirationDate.Hour(), input.IssuanceExpirationDate.Minute(), input.IssuanceExpirationDate.Second())
 	} else {
 		caExpiration = fmt.Sprintf("%d", input.CAExpiration.Unix()-time.Now().Unix())
-		issuanceExpiration = fmt.Sprintf("%d", input.IssuanceExpiration.Unix()-time.Now().Unix())
+		issuanceExpiration = fmt.Sprintf("%d", int64(*input.IssuanceExpirationDuration))
 	}
 	body := api.CreateCAPayload{
 		KeyMetadata: api.CreacteCAKeyMetadataSubject{
@@ -140,9 +140,9 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 			Organization:     input.Subject.Organization,
 			OrganizationUnit: input.Subject.OrganizationUnit,
 		},
-		ExpirationType:     string(input.ExpirationType),
-		CAExpiration:       caExpiration,
-		IssuanceExpiration: issuanceExpiration,
+		IssuanceExpirationType: string(input.IssuanceExpirationType),
+		CAExpiration:           caExpiration,
+		IssuanceExpiration:     issuanceExpiration,
 	}
 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/pki", body)
@@ -170,35 +170,36 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 	return &deserializedOutput, nil
 }
 
-// func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
-// 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: input.Certificate.Raw})
-// 	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
-// 	privKeyString, _ := input.PrivateKey.GetPEMString()
-// 	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
+func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
+	// 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: input.Certificate.Raw})
+	// 	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
+	// 	privKeyString, _ := input.PrivateKey.GetPEMString()
+	// 	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
 
-// 	body := struct {
-// 		IssuanceDuration int    `json:"issuance_duration"`
-// 		Certificate      string `json:"certificate"`
-// 		PrivateKey       string `json:"private_key"`
-// 	}{
-// 		Certificate:      base64CrtContent,
-// 		PrivateKey:       base64CKeyContent,
-// 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
-// 	}
+	// 	body := struct {
+	// 		IssuanceDuration int    `json:"issuance_duration"`
+	// 		Certificate      string `json:"certificate"`
+	// 		PrivateKey       string `json:"private_key"`
+	// 	}{
+	// 		Certificate:      base64CrtContent,
+	// 		PrivateKey:       base64CKeyContent,
+	// 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
+	// 	}
 
-// 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
-// 	if err != nil {
-// 		return &api.ImportCAOutput{}, err
-// 	}
+	// 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
+	// 	if err != nil {
+	// 		return &api.ImportCAOutput{}, err
+	// 	}
 
-// 	var output api.ImportCAOutput
-// 	_, err = c.client.Do(req, &output)
-// 	if err != nil {
-// 		return &output, err
-// 	}
+	// 	var output api.ImportCAOutput
+	// 	_, err = c.client.Do(req, &output)
+	// 	if err != nil {
+	// 		return &output, err
+	// 	}
 
-// 	return &output, err
-// }
+	// return &output, err
+	return &api.ImportCAOutput{}, nil
+}
 
 func (c *lamassuCaClientConfig) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
@@ -306,6 +307,16 @@ func (c *lamassuCaClientConfig) UpdateCertificateStatus(ctx context.Context, inp
 func (c *lamassuCaClientConfig) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
 	// TODO: To implement
 	return &api.ScanAboutToExpireCertificatesOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	// TODO: To implement
+	return &api.VerifyOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	// TODO: To implement
+	return &api.SignOutput{}, nil
 }
 
 func (c *lamassuCaClientConfig) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {

@@ -15,11 +15,11 @@ type CreacteCAKeyMetadataSubject struct {
 }
 
 type CreateCAPayload struct {
-	Subject            CreateCASubjectPayload      `json:"subject"`
-	KeyMetadata        CreacteCAKeyMetadataSubject `json:"key_metadata"`
-	ExpirationType     string                      `json:"expiration_type" validate:"required"`
-	CAExpiration       string                      `json:"ca_expiration" validate:"required"`
-	IssuanceExpiration string                      `json:"issuance_expiration" validate:"required"`
+	Subject                CreateCASubjectPayload      `json:"subject"`
+	KeyMetadata            CreacteCAKeyMetadataSubject `json:"key_metadata"`
+	CAExpiration           string                      `json:"ca_expiration" validate:"required"`
+	IssuanceExpiration     string                      `json:"issuance_expiration" validate:"required"`
+	IssuanceExpirationType string                      `json:"expiration_type" validate:"required"`
 }
 
 // -------------------------------------------------------------
@@ -40,6 +40,29 @@ type RevokeCAPayload struct {
 
 // -------------------------------------------------------------
 
+type SignRequestPayload struct {
+	Message          string `json:"message" validate:"required"`
+	MessageType      string `json:"message_type" validate:"required"`
+	SigningAlgorithm string `json:"signing_algorithm" validate:"required"`
+}
+
+type VerifyRequestPayload struct {
+	Message          string `json:"message" validate:"required"`
+	MessageType      string `json:"message_type" validate:"required"`
+	SigningAlgorithm string `json:"signing_algorithm" validate:"required"`
+	Signature        string `json:"signature" validate:"required"`
+}
+
+// -------------------------------------------------------------
+
 type RevokeCertificatePayload struct {
 	RevocationReason string `json:"revocation_reason"`
+}
+
+type ImportCAPayload struct {
+	Crt                    string `json:"certificate" validate:"required"`
+	WithPrivateKey         bool   `json:"with_private_key" validate:"required"`
+	PrivateKey             string `json:"private_key"`
+	IssuanceExpiration     string `json:"issuance_expiration"`
+	IssuanceExpirationType string `json:"expiration_type"`
 }
